@@ -15,11 +15,17 @@ typedef struct tVertex
 {
   unsigned int id = -1;
   bool isTerminal;
-  vector<AdjacencyInfo> adjacencies;
 } Vertex;
 
+typedef struct tAdjacencies
+{
+  Vertex vertex;
+  vector<AdjacencyInfo> adjacencies;
+} Adjacencies;
+
+
 /*Typedefs*/
-typedef vector<Vertex> Graph;
+typedef vector<Adjacencies> Graph;
 
 /*Declaracao de funcoes*/
 unsigned int readFile(FILE*);
@@ -125,7 +131,7 @@ unsigned int readFile(FILE* file)
   //Test - begin
   for (unsigned int i = 0; i < numVertices; i++)
   {
-    printf("vetor na posicao %u, %u:\n", i + 1, graph.at(i).isTerminal);
+    printf("vetor na posicao %u, %u:\n", i + 1, graph.at(i).vertex.isTerminal);
 
     for (unsigned int j = 0; j < graph.at(i).adjacencies.size(); j++)
     {
@@ -159,8 +165,8 @@ bool readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
 
     if (graph->at(vertex - 1).adjacencies.size() == 0)
     {
-      graph->at(vertex - 1).id = vertex;
-      graph->at(vertex - 1).isTerminal = false;
+      graph->at(vertex - 1).vertex.id = vertex;
+      graph->at(vertex - 1).vertex.isTerminal = false;
       graph->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
     }
     else
@@ -174,8 +180,8 @@ bool readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
 
     if (graph->at(vertex2 - 1).adjacencies.size() == 0)
     {
-      graph->at(vertex2 - 1).id = vertex2;
-      graph->at(vertex2 - 1).isTerminal = false;
+      graph->at(vertex2 - 1).vertex.id = vertex2;
+      graph->at(vertex2 - 1).vertex.isTerminal = false;
       graph->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
     }
     else
@@ -200,7 +206,7 @@ bool readTerminals(FILE* file, Graph* graph, const unsigned int& numTerminals)
     if (ferror(file))
       return true;
 
-    graph->at(vertex - 1).isTerminal = true;
+    graph->at(vertex - 1).vertex.isTerminal = true;
   }
 
   return false;
