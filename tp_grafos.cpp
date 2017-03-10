@@ -1,99 +1,207 @@
 #include <iostream>
-#include <cstdio>
-#include <cstdlib>
 #include <vector>
+#include <cstdio>
 
 using namespace std;
 
-typedef struct tVertex
+/*Structs*/
+typedef struct tAdjacencyInfo
 {
-  bool isTerminal;
   unsigned int id;
   unsigned int weight;
+} AdjacencyInfo;
+
+typedef struct tVertex
+{
+  unsigned int id = -1;
+  bool isTerminal;
+  vector<AdjacencyInfo> adjacencies;
 } Vertex;
 
-typedef vector<vector<Vertex>> VertexList;
+/*Typedefs*/
+typedef vector<Vertex> Graph;
 
-typedef struct tGraph
-{
-  VertexList list;
-} Graph;
+/*Declaracao de funcoes*/
+unsigned int readFile(FILE*);
+bool readEdges(FILE*, Graph*, const unsigned int&);
+bool readTerminals(FILE*, Graph*, const unsigned int&);
 
-void readFile()
+/*Funcao principal*/
+int main(int argc, char* argv[])
 {
-  char aux[100];
-  unsigned int numVertex, numEdges, numTerminals, vertex, vertex2, weight;
+  unsigned int error;
   FILE* file = NULL;
 
-  file = fopen("/home/junin/workspace/qtcreator/graph_theory_tp/1.stp", "r");
+  if (argc == 2)
+  {
+    file = fopen(argv[1], "r");
+  }
+  else
+  {
+    printf("Numero de parametros esta incorreto (informe apenas 1 arquivo de entrada)\n");
 
-  if (file != NULL)
-  {    
-    //Descarta primeira linha
-    fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
-    printf("%s\n", aux);
-    //Le numero de vertices
-    fscanf(file, "%[A-Z a-z] %u %*[\r] %*[\n]", aux, &numVertex);
-    printf("%s, %u\n", aux, numVertex);
-    //Le numero de arestas
-    fscanf(file, "%[A-Z a-z] %u %*[\r] %*[\n]", aux, &numEdges);
-    printf("%s, %u\n", aux, numEdges);
+    return -1;
+  }
 
-    VertexList graph(numVertex);
+  if (!ferror(file))
+  {
+    error = readFile(file);
 
-    for (unsigned int i = 0; i < numEdges; i++)
-    {
-      fscanf(file, "%c %u %u %u %*[\r] %*[\n]", aux, &vertex, &vertex2, &weight);
-
-      Vertex v;
-      v.id = vertex2 - 1;
-      v.weight = weight;
-
-      graph.at(vertex - 1).push_back(v);
-
-      v.id = vertex - 1;
-
-      graph.at(vertex2 - 1).push_back(v);
-    }
-
-    //Test - begin
-    for (unsigned int i = 0; i < numVertex; i++)
-    {
-      printf("vetor na posicao %u:\n", i + 1);
-
-      for (unsigned int j = 0; j < graph.at(i).size(); j++)
-      {
-        printf("%u, %u\n", graph.at(i).at(j).id + 1, graph.at(i).at(j).weight);
-      }
-    }
-    //Test - end
-
-    //Descarta "end"
-    fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
-    //Descarta "Section Terminals"
-    fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
-    //Le numero de terminais
-    fscanf(file, "%[A-Z a-z] %u %*[\r] %*[\n]", aux, &numTerminals);
-
-    for (unsigned int i = 0; i < numTerminals; i++)
-    {
-      fscanf(file, "%c %u %*[\r] %*[\n]", aux, &vertex);
-
-      /*Como atualizar os vertices com a informacao "terminal",
-      que ha vertices duplicados na lista de adjacencia? De repente,
-      pode ser mesmo melhor deixar para incluir os vertices na lista
-      apos definir quais deles sao terminais. Alem disso, estava pensando
-      numa outra forma de representar o grafo no nosso programa (que tb
-      usa lista de adjacencia*/
-    }
+    if (error)
+      printf("Erro (readFile): %u\n", error);
 
     fclose(file);
-  }  
-}
 
-int main()
-{
-  readFile();
+    return error;
+  }
+  else
+  {
+    printf("Nao foi possivel ler o arquivo\n");
+
+    return -2;
+  }
 
   return 0;
+}
+
+/*Funcao principal de leitura do arquivo*/
+unsigned int readFile(FILE* file)
+{
+  char aux[100];
+  unsigned int numVertices, numEdges, numTerminals;
+  bool error;
+
+  //Le linha de inicio da secao "Grafo"
+  fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
+
+  if (ferror(file))
+    return 1;
+
+  //Le numero de vertices
+  fscanf(file, "%[A-Z a-z] %u %*[\r] %*[\n]", aux, &numVertices);
+
+  if (ferror(file))
+    return 2;
+
+  //Le numero de arestas
+  fscanf(file, "%[A-Z a-z] %u %*[\r] %*[\n]", aux, &numEdges);
+
+  if (ferror(file))
+    return 3;
+
+  //Cria o grafo, de acordo com numero de vertices lido
+  Graph graph(numVertices);
+
+  //Chama funcao que realiza a leitura das arestas
+  error = readEdges(file, &graph, numEdges);
+
+  if (error)
+    return 4;
+
+  //Descarta "End"
+  fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
+
+  if (ferror(file))
+    return 5;
+
+  //Le linha de inicio da secao "Terminais"
+  fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
+
+  if (ferror(file))
+    return 6;
+
+  //Le numero de terminais
+  fscanf(file, "%[A-Z a-z] %u %*[\r] %*[\n]", aux, &numTerminals);
+
+  if (ferror(file))
+    return 7;
+
+  //Chama funcao que realiza a leitura dos terminais
+  error = readTerminals(file, &graph, numTerminals);
+
+  if (error)
+    return 8;
+
+  //Test - begin
+  for (unsigned int i = 0; i < numVertices; i++)
+  {
+    printf("vetor na posicao %u, %u:\n", i + 1, graph.at(i).isTerminal);
+
+    for (unsigned int j = 0; j < graph.at(i).adjacencies.size(); j++)
+    {
+      printf("%u, %u\n", graph.at(i).adjacencies.at(j).id, graph.at(i).adjacencies.at(j).weight);
+    }
+  }
+  //Test - end
+
+  //Sem erro na manipulacao do arquivo
+  return 0;
+}
+
+/*Funcao responsavel pela leitura das arestas*/
+bool readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
+{
+  char aux[100];
+  unsigned int vertex, vertex2, weight;
+
+  AdjacencyInfo auxAdjacencyInfo;
+
+  for (unsigned int i = 0; i < numEdges; i++)
+  {
+    fscanf(file, "%c %u %u %u %*[\r] %*[\n]", aux, &vertex, &vertex2, &weight);
+
+    if (ferror(file))
+      return true;
+
+    //vertice u -> vertice v
+    auxAdjacencyInfo.id = vertex2;
+    auxAdjacencyInfo.weight = weight;
+
+    if (graph->at(vertex - 1).adjacencies.size() == 0)
+    {
+      graph->at(vertex - 1).id = vertex;
+      graph->at(vertex - 1).isTerminal = false;
+      graph->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
+    }
+    else
+    {
+      graph->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
+    }
+
+    //vertice v -> vertice u
+    auxAdjacencyInfo.id = vertex;
+    auxAdjacencyInfo.weight = weight;
+
+    if (graph->at(vertex2 - 1).adjacencies.size() == 0)
+    {
+      graph->at(vertex2 - 1).id = vertex2;
+      graph->at(vertex2 - 1).isTerminal = false;
+      graph->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
+    }
+    else
+    {
+      graph->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
+    }
+  }
+
+  return false;
+}
+
+/*Funcao responsavel pela leitura dos terminais*/
+bool readTerminals(FILE* file, Graph* graph, const unsigned int& numTerminals)
+{
+  char aux[100];
+  unsigned int vertex;
+
+  for (unsigned int i = 0; i < numTerminals; i++)
+  {
+    fscanf(file, "%c %u %*[\r] %*[\n]", aux, &vertex);
+
+    if (ferror(file))
+      return true;
+
+    graph->at(vertex - 1).isTerminal = true;
+  }
+
+  return false;
 }
