@@ -23,20 +23,38 @@ typedef struct tMinimalRouteInfo
 {
   unsigned int weight;
   vector<int> route;
-} MinimalRoute;
+} MinimalRouteInfo;
 
 typedef struct tDijkstraVertex : Vertex
 {
   unsigned int distanceFromSource;
   int previousVertexId;
-  vector<MinimalRoute> minimalRouteInfo;
+  vector<MinimalRouteInfo> minimalRouteInfo;
 } DijkstraVertex;
+
+typedef struct tPointerVertex
+{
+  int id;
+  DijkstraVertex* realVertex;
+} PointerVertex;
+
+typedef struct tPointerVertex2
+{
+  int id;
+  char c;
+} PointerVertex2;
 
 typedef struct tAdjacencies
 {
   Vertex vertex;
   vector<AdjacencyInfo> adjacencies;
 } Adjacencies;
+
+typedef struct tGraphX //usar isso ao inves do Graph anterior
+{
+  Adjacencies adjacencyList;
+  vector<Vertex> terminalList;
+} GraphX;
 
 /*Typedefs*/
 typedef vector<Adjacencies> Graph;
@@ -45,7 +63,7 @@ typedef vector<Adjacencies> Graph;
 unsigned int readFile(FILE*, Graph**);
 bool readEdges(FILE*, Graph*, const unsigned int&);
 bool readTerminals(FILE*, Graph*, const unsigned int&);
-bool compare(DijkstraVertex&, DijkstraVertex&);
+bool compare(DijkstraVertex*&, DijkstraVertex*&);
 void shortestPath(Graph*);
 
 /*Funcao principal*/
@@ -230,9 +248,9 @@ bool readTerminals(FILE* file, Graph* graph, const unsigned int& numTerminals)
 }
 
 /*Funcao auxiliar (usada na criacao/ajuste do heap binario)*/
-bool compare(DijkstraVertex& vertex, DijkstraVertex& vertex2)
+bool compare(DijkstraVertex*& ptr, DijkstraVertex*& ptr2)
 {
-  return vertex.distanceFromSource > vertex2.distanceFromSource;
+  return ptr->distanceFromSource > ptr2->distanceFromSource;
 }
 
 /*Funcao que executa o algoritmo de Dijkstra*/
@@ -241,7 +259,10 @@ void shortestPath(Graph* graph)
   unsigned int newDistance;
   DijkstraVertex auxVertex;
   AdjacencyInfo neighbourInfo;
-  vector<DijkstraVertex> openVertices;
+  vector<DijkstraVertex*> openVertices(graph->size());
+  vector<PointerVertex2> test(100);
+  //vector<DijkstraVertex> openVertices;
+  vector<DijkstraVertex> resultVertices(graph->size()); //rever nome...
   vector<DijkstraVertex> terminals;
 
   /*Inicializacao do conjunto que representa os vertices abertos*/
@@ -256,45 +277,103 @@ void shortestPath(Graph* graph)
     ainda nao foi definido (incializado com o valor do proprio rotulo)*/
     auxVertex.previousVertexId = i + 1;
     /*Insere vertice corrente na lista de vertices abertos*/
-    openVertices.push_back(auxVertex);
+    //resultVertices.push_back(auxVertex); //test
+    resultVertices.at(i) = auxVertex;
     /*Caso o vertice i seja um terminal, ele eh adicionado a lista
     de terminais tambem*/
+    /*Vertice aberto i passa a apontar para o vertice Dijkstra i*/
+    openVertices.at(i) = &resultVertices.at(i);
+
     if (graph->at(i).vertex.isTerminal)
     {
       auxVertex.isTerminal = true;
 
       terminals.push_back(auxVertex);
     }
-  }
+  } 
+
+  //test - inicio
+  //for (unsigned int i = 0; i < resultVertices.size(); i++)
+    //resultVertices.at(i).distanceFromSource = 0;
+  //test - end
 
   /*Executa algoritmo de Dijkstra para cada um dos vertices terminais*/
   for (unsigned int i = 0; i < terminals.size(); i++)
   {    
-    openVertices.at(i).distanceFromSource = 0;
+    //TODO: fazer loop no terminalList.size() e usar apenas os vertices de terminalList
+    openVertices.at(i)->distanceFromSource = 0; //teste - inicializar o primeiro terminal ao inves desse
 
     unsigned int j = 0;
 
     while (openVertices.size() - j > 0)
     {
+      /*Organiza lista de forma que ela comportesse como um heap binario minimo*/
+      //teste - inicio
+      //acho que nao precisarei de make_heap aqui, pois, inicialmente, apenas a primeira posicao eh inicializada com 0
       make_heap(openVertices.begin(), openVertices.end() - j, compare);
-      auxVertex = openVertices.at(0);
-      pop_heap(openVertices.begin(), openVertices.end() - j, compare);
+      //teste - fim
+      /*Sempre considera o primeiro vertice do heap*/
+      auxVertex = *(openVertices.at(0)); //teste - pegar o primeiro terminal, ao inves desse
 
       for (unsigned int k = 0; k < graph->at(auxVertex.id - 1).adjacencies.size(); k++)
       {
         neighbourInfo = graph->at(auxVertex.id - 1).adjacencies.at(k);
-        newDistance = auxVertex.distanceFromSource + neighbourInfo.weight;
 
-        if (newDistance < openVertices.at(neighbourInfo.id - 1).distanceFromSource)
+        /*Evita calcular distancia duas vezes*/
+        if (neighbourInfo.id != auxVertex.previousVertexId)
+          newDistance = auxVertex.distanceFromSource + neighbourInfo.weight;
+
+        if (newDistance < resultVertices.at(neighbourInfo.id - 1).distanceFromSource)
         {
-          terminals.at(neighbourInfo.id - 1).distanceFromSource = newDistance;
-          terminals.at(neighbourInfo.id - 1).previousVertexId = auxVertex.id;
+          //TODO:armazenar isto fora do no... quem sabe
+          resultVertices.at(neighbourInfo.id - 1).distanceFromSource = newDistance;
+          resultVertices.at(neighbourInfo.id - 1).previousVertexId = auxVertex.id;
         }
       }
+      //teste - inicio
+      //if (j == 0)
+        //make_heap(openVertices.begin(), openVertices.end() - j, compare);
+      //teste - fim
 
-      /*Essa variavel limita o numero de verices abertos (pop_heap nao remove - so
+      /*Primeiro elemento do heap troca de lugar com o ultimo e heap eh reorganizado
+      (Obs.: pop_heap so deve ser executado apos a lista openVertices ter sido atualizada.
+      Caso contrario, os valores seriam atribuidos a posicoes diferentes)*/
+      pop_heap(openVertices.begin(), openVertices.end() - j);
+      /*Essa variavel limita o numero de vertices abertos (pop_heap nao remove - apenas
       joga para o final da lista*/
       j++;
+    }
+
+    /*Identifica rota e seu custo minimo*/
+    MinimalRouteInfo auxMinimalRouteInfo;    
+
+    //for (unsigned int j = 0; j < graph->at(terminals.at(i).id - 1).adjacencies.size(); j++)
+    for (unsigned int j = 0; j < terminals.size(); j++)
+    {
+      /*Nao ha necessidade de calcular rota para si proprio*/
+      if (i != j)
+      {
+        /*Identifica rotulo do vertice que faz ajdacencia com o terminal corrente*/
+        unsigned int nextId = j + 1;
+        /*Obtem custo da distancia entre o terminal corrente e sua adjacencia corrente*/
+        auxMinimalRouteInfo.weight = resultVertices.at(nextId - 1).distanceFromSource;
+        /**/
+        auxMinimalRouteInfo.route.clear();
+
+        while (nextId != i + 1)
+        {
+          //TODO: arrumar comentarios          
+          /*Obtem rotulo do vertice anterior no caminho terminal -> adjacencia correntes*/
+          auxMinimalRouteInfo.route.push_back(nextId);
+          /*Atualiza rotulo*/
+          nextId = resultVertices.at(nextId - 1).previousVertexId;
+        }
+
+        /*Insere rotulo do vertice de origem*/
+        auxMinimalRouteInfo.route.push_back(i + 1);
+        /*Insere informacao da rota na lista de terminais*/
+        terminals.at(i).minimalRouteInfo.push_back(auxMinimalRouteInfo);
+      }
     }
   }
 }
