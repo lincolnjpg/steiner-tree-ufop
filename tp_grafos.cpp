@@ -94,6 +94,9 @@ int main(int argc, char* argv[])
 
     dijkstraResult = shortestPath(graph);
 
+    //test
+    createCompleteGraph(dijkstraResult);
+
     fclose(file);
     delete graph;
 
@@ -380,17 +383,25 @@ Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>* dijkstraResult)
 {
   Graph* completeGraph = new Graph;
   completeGraph->adjacencyList = new vector<Adjacencies>(dijkstraResult->size());
-  unsigned int numVertices = completeGraph->adjacencyList->size();
+  AdjacencyInfo adjacencyInfo;
+  unsigned int numVertices = dijkstraResult->size();
   unsigned int numAdjacencies;
+  unsigned int firstVertex;
+  unsigned int lastVertex;
 
   for (unsigned int i = 0; i < numVertices; i++)
   {
-    numAdjacencies = completeGraph->adjacencyList->at(i).adjacencies.size();
+    numAdjacencies = dijkstraResult->at(i).size();
 
-    for (unsigned int j = 0; i < numAdjacencies; j++)
+    for (unsigned int j = 0; j < numAdjacencies; j++)
     {
-      //TODO: montar completeGraph;
-
+      firstVertex = dijkstraResult->at(i).at(j).route.at(dijkstraResult->at(i).
+        at(j).route.size() - 1);
+      lastVertex = dijkstraResult->at(i).at(j).route.at(0);
+      completeGraph->adjacencyList->at(i).vertex.id = firstVertex;
+      adjacencyInfo.id = lastVertex;
+      adjacencyInfo.weight = dijkstraResult->at(i).at(j).weight;
+      completeGraph->adjacencyList->at(i).adjacencies.push_back(adjacencyInfo);
     }
   }
 }
