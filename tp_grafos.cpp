@@ -4,6 +4,14 @@
 #include <cstdio>
 #include <climits>
 
+/*Mensages*/
+const char MSG_PARAMS_ERROR[] =
+  "Numero de parametros esta incorreto (informe apenas 1 arquivo de entrada)";
+const char MSG_READFILE_ERROR[] =
+  "Operacao de leitura do arquivo falhou. Codigo do erro:";
+const char MSG_OPEN_FILE_ERROR[] =
+  "Nao foi possivel abrir o arquivo especificado";
+
 using namespace std;
 
 /*Structs*/
@@ -56,12 +64,14 @@ bool readEdges(FILE*, Graph*, const unsigned int&);
 bool readTerminals(FILE*, Graph*, const unsigned int&);
 bool compare(DijkstraVertex*&, DijkstraVertex*&);
 vector<vector<MinimalRouteInfo>>* shortestPath(Graph*);
+Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>*);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
 {
   unsigned int returnedValue;
   Graph* graph = NULL;
+  vector<vector<MinimalRouteInfo>>* dijkstraResult;
   FILE* file = NULL;
 
   if (argc == 2)
@@ -70,7 +80,7 @@ int main(int argc, char* argv[])
   }
   else
   {
-    printf("Numero de parametros esta incorreto (informe apenas 1 arquivo de entrada)\n");
+    printf("%s\n", MSG_PARAMS_ERROR);
 
     return -1;
   }
@@ -80,9 +90,9 @@ int main(int argc, char* argv[])
     returnedValue = readFile(file, &graph);
 
     if (returnedValue)
-      printf("Erro (readFile): %u\n", returnedValue);
+      printf("%s %u\n", MSG_READFILE_ERROR, returnedValue);
 
-    shortestPath(graph);
+    dijkstraResult = shortestPath(graph);
 
     fclose(file);
     delete graph;
@@ -91,7 +101,7 @@ int main(int argc, char* argv[])
   }
   else
   {
-    printf("Nao foi possivel ler o arquivo\n");
+    printf("%s\n", MSG_OPEN_FILE_ERROR);
 
     return -2;
   }
@@ -361,4 +371,26 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* graph)
   }
 
   return result;
+}
+
+/*Funcao que cria um grafo completo, em que os vertices sao os terminais e o
+peso das arestas que os une eh a distancia de menor custo entre cada um dos
+terminais (valor calculado via Dijkstra)*/
+Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>* dijkstraResult)
+{
+  Graph* completeGraph = new Graph;
+  completeGraph->adjacencyList = new vector<Adjacencies>(dijkstraResult->size());
+  unsigned int numVertices = completeGraph->adjacencyList->size();
+  unsigned int numAdjacencies;
+
+  for (unsigned int i = 0; i < numVertices; i++)
+  {
+    numAdjacencies = completeGraph->adjacencyList->at(i).adjacencies.size();
+
+    for (unsigned int j = 0; i < numAdjacencies; j++)
+    {
+      //TODO: montar completeGraph;
+
+    }
+  }
 }
