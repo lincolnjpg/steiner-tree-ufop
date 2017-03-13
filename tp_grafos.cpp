@@ -60,7 +60,7 @@ typedef struct tGraph
 
 /*Declaracao de funcoes*/
 unsigned int readFile(FILE*, Graph**);
-bool readEdges(FILE*, Graph*, const unsigned int&);
+unsigned int readEdges(FILE*, Graph*, const unsigned int&);
 bool readTerminals(FILE*, Graph*, const unsigned int&);
 bool compare(DijkstraVertex*&, DijkstraVertex*&);
 vector<vector<MinimalRouteInfo>>* shortestPath(Graph*);
@@ -114,7 +114,10 @@ int main(int argc, char* argv[])
 unsigned int readFile(FILE* file, Graph** graph)
 {
   char aux[100];
-  unsigned int numVertices, numEdges, numTerminals;
+  unsigned int numVertices;
+  unsigned int numEdges;
+  unsigned int numTerminals;
+  unsigned int returnedValue;
   bool error;
 
   //Le linha de inicio da secao "Grafo"
@@ -141,34 +144,34 @@ unsigned int readFile(FILE* file, Graph** graph)
   (*graph)->terminalList = nullptr;
 
   //Chama funcao que realiza a leitura das arestas
-  error = readEdges(file, *graph, numEdges);
+  returnedValue = readEdges(file, *graph, numEdges);
 
-  if (error)
-    return 4;
+  if (returnedValue)
+    return returnedValue;
 
   //Descarta "End"
   fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
 
   if (ferror(file))
-    return 5;
+    return 4;
 
   //Le linha de inicio da secao "Terminais"
   fscanf(file, "%[A-Z a-z] %*[\r] %*[\n]", aux);
 
   if (ferror(file))
-    return 6;
+    return 5;
 
   //Le numero de terminais
   fscanf(file, "%[A-Z a-z] %u %*[\r] %*[\n]", aux, &numTerminals);
 
   if (ferror(file))
-    return 7;
+    return 6;
 
   //Chama funcao que realiza a leitura dos terminais
   error = readTerminals(file, *graph, numTerminals);
 
   if (error)
-    return 8;
+    return 7;
 
   //Test - begin
   /*
@@ -188,7 +191,7 @@ unsigned int readFile(FILE* file, Graph** graph)
 }
 
 /*Funcao responsavel pela leitura das arestas*/
-bool readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
+unsigned int readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
 {
   char aux[100];
   int vertex, vertex2;
@@ -201,7 +204,7 @@ bool readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
     fscanf(file, "%c %u %u %u %*[\r] %*[\n]", aux, &vertex, &vertex2, &weight);
 
     if (ferror(file))
-      return true;
+      return 1;
 
     //vertice u -> vertice v
     auxAdjacencyInfo.id = vertex2;
@@ -210,13 +213,10 @@ bool readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
     if (graph->adjacencyList->at(vertex - 1).adjacencies.size() == 0)
     {
       graph->adjacencyList->at(vertex - 1).vertex.id = vertex;
-      graph->adjacencyList->at(vertex - 1).vertex.isTerminal = false;
-      graph->adjacencyList->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
+      graph->adjacencyList->at(vertex - 1).vertex.isTerminal = false;      
     }
-    else
-    {
-      graph->adjacencyList->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
-    }
+
+    graph->adjacencyList->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
 
     //vertice v -> vertice u
     auxAdjacencyInfo.id = vertex;
@@ -226,15 +226,17 @@ bool readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
     {
       graph->adjacencyList->at(vertex2 - 1).vertex.id = vertex2;
       graph->adjacencyList->at(vertex2 - 1).vertex.isTerminal = false;
-      graph->adjacencyList->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
     }
-    else
-    {
-      graph->adjacencyList->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
-    }
+
+    graph->adjacencyList->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
   }
 
-  return false;
+  /*Verifica se grafo eh conexo*/
+  for (unsigned int i = 0; i < graph->adjacencyList->size(); i++)
+    if (graph->adjacencyList->at(i).vertex.id == -1)
+      return 2;
+
+  return 0;
 }
 
 /*Funcao responsavel pela leitura dos terminais*/
