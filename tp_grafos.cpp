@@ -55,7 +55,7 @@ unsigned int readFile(FILE*, Graph**);
 bool readEdges(FILE*, Graph*, const unsigned int&);
 bool readTerminals(FILE*, Graph*, const unsigned int&);
 bool compare(DijkstraVertex*&, DijkstraVertex*&);
-void shortestPath(Graph*);
+vector<vector<MinimalRouteInfo>>* shortestPath(Graph*);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
@@ -158,6 +158,7 @@ unsigned int readFile(FILE* file, Graph** graph)
     return 8;
 
   //Test - begin
+  /*
   for (unsigned int i = 0; i < numVertices; i++)
   {
     printf("vetor na posicao %u, %u:\n", i + 1, (*graph)->adjacencyList->at(i).vertex.isTerminal);
@@ -166,6 +167,7 @@ unsigned int readFile(FILE* file, Graph** graph)
       printf("%u, %u\n", (*graph)->adjacencyList->at(i).adjacencies.at(j).id,
              (*graph)->adjacencyList->at(i).adjacencies.at(j).weight);
   }
+  */
   //Test - end
 
   //Sem erro na manipulacao do arquivo
@@ -251,14 +253,15 @@ bool compare(DijkstraVertex*& ptr, DijkstraVertex*& ptr2)
 }
 
 /*Funcao que executa o algoritmo de Dijkstra*/
-void shortestPath(Graph* graph)
+vector<vector<MinimalRouteInfo>>* shortestPath(Graph* graph)
 {
   unsigned int newDistance;
   DijkstraVertex auxVertex;
   AdjacencyInfo neighbourInfo;
   vector<DijkstraVertex*> fakeVertices(graph->adjacencyList->size());
   vector<DijkstraVertex> openVertices(graph->adjacencyList->size());
-  vector<vector<MinimalRouteInfo>> result(graph->terminalList->size());
+  vector<vector<MinimalRouteInfo>>* result =
+    new vector<vector<MinimalRouteInfo>>(graph->terminalList->size());
 
   /*Inicializacao do conjunto que representa os vertices abertos*/
   for (unsigned int i = 0; i < graph->adjacencyList->size(); i++)
@@ -352,11 +355,10 @@ void shortestPath(Graph* graph)
         /*Insere ID do vertice de origem*/
         auxMinimalRouteInfo.route.push_back(nextId);
         /*Insere informacao da rota na lista de terminais*/
-        result.at(i).push_back(auxMinimalRouteInfo);
+        result->at(i).push_back(auxMinimalRouteInfo);
       }
     }
   }
-}
 
-/*TODO: distancias e IDs dos vertices anteriores devem ser gravados em outra estrutura
-de dados - semelhante a fakeVertices.*/
+  return result;
+}
