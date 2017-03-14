@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <set>
+#include <map>
 #include <algorithm>
 #include <cstdio>
 #include <climits>
@@ -73,8 +74,10 @@ bool readTerminals(FILE*, Graph*, const unsigned int&);
 bool compare(DijkstraVertex*&, DijkstraVertex*&);
 vector<vector<MinimalRouteInfo>>* shortestPath(Graph*);
 Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>*);
-void generateMST(Graph*);
-bool hasCycle(Graph*);
+bool insertMST(Graph*, int, int, AdjacencyInfo);
+bool compareKruskal(Edge&, Edge&);
+Graph* generateMST(Graph*);
+bool hasCycle(Graph*, set<int>*, int, int);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
@@ -82,6 +85,7 @@ int main(int argc, char* argv[])
   unsigned int returnedValue;
   Graph* inputGraph = NULL;
   Graph* terminalsCompleteGraph = NULL;
+  Graph* mst;
 
   vector<vector<MinimalRouteInfo>>* dijkstraResult;
   FILE* file = NULL;
@@ -108,7 +112,7 @@ int main(int argc, char* argv[])
 
     terminalsCompleteGraph = createCompleteGraph(dijkstraResult);
     //Algoritmo de Kruskal
-    generateMST(terminalsCompleteGraph);
+    mst = generateMST(terminalsCompleteGraph);
 
     fclose(file);
 
@@ -460,6 +464,12 @@ Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>* dijkstraResult)
   return completeGraph;
 }
 
+/*Funcao que insere um vertice na MST*/
+bool insertMST(Graph* mst, int index, int id, AdjacencyInfo adjacencyInfo)
+{
+  return true; //TODO: verificar se precisar fazer mesmo...
+}
+
 /*Funcao auxiliar que usada na criacao/ajuste do heap binario
 para o algoritmo de Kruskal*/
 bool compareKruskal(Edge& edge, Edge& edge2)
@@ -469,22 +479,53 @@ bool compareKruskal(Edge& edge, Edge& edge2)
 
 /*Função que verifica se um grafo possui algum ciclo, atraves
 do uso do algoritmo DFS*/
-bool hasCycle(Graph* mst)
+bool hasCycle(Graph* mst, set<int>* visitedVertices, int sourceIndex,
+              int parentId)
 {
+  unsigned int i = 0;
+  int vertexId = mst->adjacencyList->at(sourceIndex).vertex.id;
+  int neighbourId;
 
+  visitedVertices->insert(vertexId);
+
+  while (i < mst->adjacencyList->at(sourceIndex).adjacencies.size())
+  {
+    neighbourId = mst->adjacencyList->at(sourceIndex).adjacencies.at(i).id;
+    i++;
+
+    if (visitedVertices->find(neighbourId) == visitedVertices->end())
+    {
+      /*Vizinho corrente ainda nao foi visitado*/
+
+      /*Vizinho corrente eh inserido no conjunto de vertices visitados*/
+      visitedVertices->insert(neighbourId);
+      /*Chamada recursiva*/
+      return hasCycle(mst, visitedVertices, i, vertexId);
+    }
+    else if (neighbourId != /*mst->adjacencyList->at(parentId).vertex.id*/parentId)
+    {
+      /*Vizinho corrente ja foi visitado e foi alcancado
+      a partir de outro vertice: ciclo detectado*/
+      return true;
+    }
+  }
+
+  return false;
 }
 
-void generateMST(Graph* completeGraph)
+Graph* generateMST(Graph* completeGraph)
 {
   /*Usar essa ideia de 'size' na funcao acima...*/
   unsigned int size = completeGraph->adjacencyList->size();
   vector<Edge>* edgeList = new vector<Edge>;
-  Graph mst;
-  mst.adjacencyList = new vector<Adjacencies>(size);
-  AdjacencyInfo adjacenyInfo;
+  Graph* mst = new Graph;
+  mst->adjacencyList = new vector<Adjacencies>(size);
+  AdjacencyInfo adjacencyInfo;
   Edge edge;
-  set<int> treeVertexSet;
+  map<int, int> distinctVertices;
+  set<int> visitedVertices;
 
+  /*Gera lista de arestas existentes no grafo completo, recebido como paramtro*/
   for (unsigned int i = 0; i < size; i++)
   {
     for (unsigned int j = i + 1, k = 0; j < size; j++, k++)
@@ -496,33 +537,49 @@ void generateMST(Graph* completeGraph)
     }
   }
 
+  /*Ordena, de forma crescente, a lista de arestas*/
   sort(edgeList->begin(), edgeList->end(), compareKruskal);
-  treeVertexSet.insert(edgeList->at(0).vertexId);
-  treeVertexSet.insert(edgeList->at(0).vertex2Id);
-  adjacenyInfo.id = edgeList->at(0).vertex2Id;
-  adjacenyInfo.weight = edgeList->at(0).weight;
 
-  /*mst.adjacencyList->at(edgeList->at(0).vertexId - 1).adjacencies.at(0).id =
-    ;
-  mst.adjacencyList->at(edgeList->at(0).vertexId - 1).adjacencies.at(0).weight =
-    edgeList->at(0).weight;*/
-  mst.adjacencyList->at(edgeList->at(0).vertexId - 1).adjacencies.
-    push_back(adjacenyInfo);
+  unsigned int i = 0;
+  unsigned int insertionIndex = 0;
+  map<int, int>::iterator it;
 
-  unsigned int i = 1;
-
-  while (treeVertexSet.size() < size)
+  while (distinctVertices.size() < size)
   {
-    if (!hasCycle(&mst))
+    if (!hasCycle(mst, &visitedVertices, 0, -1))
     {
-      adjacenyInfo.id = edgeList->at(i).vertex2Id;
-      adjacenyInfo.weight = edgeList->at(i).weight;
-      mst.adjacencyList->at(edgeList->at(i).vertexId - 1).adjacencies.
-        push_back(adjacenyInfo);
-      treeVertexSet.insert(edgeList->at(i).vertexId);
-      treeVertexSet.insert(edgeList->at(i).vertex2Id);
+      /*Tenta inserir os dois vertices a aresta corrente no conjunto de
+      vertices distintos*/
+      distinctVertices.insert(
+          pair<int, int>(edgeList->at(i).vertexId, insertionIndex++));
+      distinctVertices.insert(
+          pair<int, int>(edgeList->at(i).vertex2Id, insertionIndex++));
+
+      /*Atualiza dados da adjacencia a ser inserida na MST*/
+      adjacencyInfo.id = edgeList->at(i).vertex2Id;
+      adjacencyInfo.weight = edgeList->at(i).weight;
+
+      /*it->second aqui sera igual a 0*/
+      /*Obtem a posicao correta de insercao do vertice na MST*/
+      it = distinctVertices.find(edgeList->at(i).vertexId);
+      /*Insere adjacencia na MST*/
+      mst->adjacencyList->at(it->second).vertex.id = edgeList->at(i).vertexId;
+      mst->adjacencyList->at(it->second).adjacencies.push_back(adjacencyInfo);
+
+      /*Atualiza dados da adjacencia a ser inserida na MST*/
+      adjacencyInfo.id = edgeList->at(i).vertexId;
+      adjacencyInfo.weight = edgeList->at(i).weight;
+
+      /*it->second aqui sera igual a 1*/
+      /*Obtem a posicao correta de insercao do vertice na MST*/
+      it = distinctVertices.find(edgeList->at(i).vertex2Id);
+      /*Insere adjacencia na MST*/
+      mst->adjacencyList->at(it->second).vertex.id = edgeList->at(i).vertex2Id;
+      mst->adjacencyList->at(it->second).adjacencies.push_back(adjacencyInfo);
     }
 
     i++;
   }
+
+  return mst;
 }
