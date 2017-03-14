@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <set>
 #include <algorithm>
 #include <cstdio>
 #include <climits>
@@ -26,6 +27,13 @@ typedef struct tVertex
   int id = -1;
   bool isTerminal;
 } Vertex;
+
+typedef struct tEdge
+{
+  int vertexId;
+  int vertex2Id;
+  unsigned int weight;
+} Edge;
 
 typedef struct tMinimalRouteInfo
 {
@@ -65,12 +73,16 @@ bool readTerminals(FILE*, Graph*, const unsigned int&);
 bool compare(DijkstraVertex*&, DijkstraVertex*&);
 vector<vector<MinimalRouteInfo>>* shortestPath(Graph*);
 Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>*);
+void generateMST(Graph*);
+bool hasCycle(Graph*);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
 {
   unsigned int returnedValue;
-  Graph* graph = NULL;
+  Graph* inputGraph = NULL;
+  Graph* terminalsCompleteGraph = NULL;
+
   vector<vector<MinimalRouteInfo>>* dijkstraResult;
   FILE* file = NULL;
 
@@ -87,18 +99,21 @@ int main(int argc, char* argv[])
 
   if (!ferror(file))
   {
-    returnedValue = readFile(file, &graph);
+    returnedValue = readFile(file, &inputGraph);
 
     if (returnedValue)
       printf("%s %u\n", MSG_READFILE_ERROR, returnedValue);
 
-    dijkstraResult = shortestPath(graph);
+    dijkstraResult = shortestPath(inputGraph);
 
-    //test
-    createCompleteGraph(dijkstraResult);
+    terminalsCompleteGraph = createCompleteGraph(dijkstraResult);
+    //Algoritmo de Kruskal
+    generateMST(terminalsCompleteGraph);
 
     fclose(file);
-    delete graph;
+
+    delete inputGraph;
+    delete terminalsCompleteGraph;
 
     return returnedValue;
   }
@@ -111,7 +126,7 @@ int main(int argc, char* argv[])
 }
 
 /*Funcao principal de leitura do arquivo*/
-unsigned int readFile(FILE* file, Graph** graph)
+unsigned int readFile(FILE* file, Graph** inputGraph)
 {
   char aux[100];
   unsigned int numVertices;
@@ -139,12 +154,12 @@ unsigned int readFile(FILE* file, Graph** graph)
     return 3;
 
   //Cria o grafo, de acordo com numero de vertices lido
-  *graph = new Graph;
-  (*graph)->adjacencyList = new vector<Adjacencies>(numVertices);
-  (*graph)->terminalList = nullptr;
+  *inputGraph = new Graph;
+  (*inputGraph)->adjacencyList = new vector<Adjacencies>(numVertices);
+  (*inputGraph)->terminalList = nullptr;
 
   //Chama funcao que realiza a leitura das arestas
-  returnedValue = readEdges(file, *graph, numEdges);
+  returnedValue = readEdges(file, *inputGraph, numEdges);
 
   if (returnedValue)
     return returnedValue;
@@ -168,7 +183,7 @@ unsigned int readFile(FILE* file, Graph** graph)
     return 6;
 
   //Chama funcao que realiza a leitura dos terminais
-  error = readTerminals(file, *graph, numTerminals);
+  error = readTerminals(file, *inputGraph, numTerminals);
 
   if (error)
     return 7;
@@ -191,7 +206,8 @@ unsigned int readFile(FILE* file, Graph** graph)
 }
 
 /*Funcao responsavel pela leitura das arestas*/
-unsigned int readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
+unsigned int readEdges(FILE* file, Graph* inputGraph,
+                       const unsigned int& numEdges)
 {
   char aux[100];
   int vertex, vertex2;
@@ -210,42 +226,42 @@ unsigned int readEdges(FILE* file, Graph* graph, const unsigned int& numEdges)
     auxAdjacencyInfo.id = vertex2;
     auxAdjacencyInfo.weight = weight;
 
-    if (graph->adjacencyList->at(vertex - 1).adjacencies.size() == 0)
+    if (inputGraph->adjacencyList->at(vertex - 1).adjacencies.size() == 0)
     {
-      graph->adjacencyList->at(vertex - 1).vertex.id = vertex;
-      graph->adjacencyList->at(vertex - 1).vertex.isTerminal = false;      
+      inputGraph->adjacencyList->at(vertex - 1).vertex.id = vertex;
+      inputGraph->adjacencyList->at(vertex - 1).vertex.isTerminal = false;
     }
 
-    graph->adjacencyList->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
+    inputGraph->adjacencyList->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
 
     //vertice v -> vertice u
     auxAdjacencyInfo.id = vertex;
     auxAdjacencyInfo.weight = weight;
 
-    if (graph->adjacencyList->at(vertex2 - 1).adjacencies.size() == 0)
+    if (inputGraph->adjacencyList->at(vertex2 - 1).adjacencies.size() == 0)
     {
-      graph->adjacencyList->at(vertex2 - 1).vertex.id = vertex2;
-      graph->adjacencyList->at(vertex2 - 1).vertex.isTerminal = false;
+      inputGraph->adjacencyList->at(vertex2 - 1).vertex.id = vertex2;
+      inputGraph->adjacencyList->at(vertex2 - 1).vertex.isTerminal = false;
     }
 
-    graph->adjacencyList->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
+    inputGraph->adjacencyList->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
   }
 
   /*Verifica se grafo eh conexo*/
-  for (unsigned int i = 0; i < graph->adjacencyList->size(); i++)
-    if (graph->adjacencyList->at(i).vertex.id == -1)
+  for (unsigned int i = 0; i < inputGraph->adjacencyList->size(); i++)
+    if (inputGraph->adjacencyList->at(i).vertex.id == -1)
       return 2;
 
   return 0;
 }
 
 /*Funcao responsavel pela leitura dos terminais*/
-bool readTerminals(FILE* file, Graph* graph, const unsigned int& numTerminals)
+bool readTerminals(FILE* file, Graph* inputGraph, const unsigned int& numTerminals)
 {
   char aux[100];
   int vertex;
 
-  graph->terminalList = new vector<Adjacencies*>(numTerminals);
+  inputGraph->terminalList = new vector<Adjacencies*>(numTerminals);
 
   for (unsigned int i = 0; i < numTerminals; i++)
   {
@@ -254,32 +270,33 @@ bool readTerminals(FILE* file, Graph* graph, const unsigned int& numTerminals)
     if (ferror(file))
       return true;
 
-    graph->adjacencyList->at(vertex - 1).vertex.isTerminal = true;
-    graph->terminalList->at(i) = &(graph->adjacencyList->at(vertex - 1));
+    inputGraph->adjacencyList->at(vertex - 1).vertex.isTerminal = true;
+    inputGraph->terminalList->at(i) = &(inputGraph->adjacencyList->at(vertex - 1));
   }
 
   return false;
 }
 
-/*Funcao auxiliar (usada na criacao/ajuste do heap binario)*/
+/*Funcao auxiliar que usada na criacao/ajuste do heap binario
+para o algoritmo de Dijkstra*/
 bool compare(DijkstraVertex*& ptr, DijkstraVertex*& ptr2)
 {
   return ptr->distanceFromSource > ptr2->distanceFromSource;
 }
 
 /*Funcao que executa o algoritmo de Dijkstra*/
-vector<vector<MinimalRouteInfo>>* shortestPath(Graph* graph)
+vector<vector<MinimalRouteInfo>>* shortestPath(Graph* inputGraph)
 {
   unsigned int newDistance;
   DijkstraVertex auxVertex;
   AdjacencyInfo neighbourInfo;
-  vector<DijkstraVertex*> fakeVertices(graph->adjacencyList->size());
-  vector<DijkstraVertex> openVertices(graph->adjacencyList->size());
+  vector<DijkstraVertex*> fakeVertices(inputGraph->adjacencyList->size());
+  vector<DijkstraVertex> openVertices(inputGraph->adjacencyList->size());
   vector<vector<MinimalRouteInfo>>* result =
-    new vector<vector<MinimalRouteInfo>>(graph->terminalList->size());
+    new vector<vector<MinimalRouteInfo>>(inputGraph->terminalList->size());
 
   /*Inicializacao do conjunto que representa os vertices abertos*/
-  for (unsigned int i = 0; i < graph->adjacencyList->size(); i++)
+  for (unsigned int i = 0; i < inputGraph->adjacencyList->size(); i++)
   {
     /*Inicializa ID do vertice*/
     auxVertex.id = i + 1;    
@@ -291,12 +308,12 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* graph)
   } 
 
   /*Executa algoritmo de Dijkstra para cada um dos vertices terminais*/
-  for (unsigned int i = 0; i < graph->terminalList->size(); i++)
+  for (unsigned int i = 0; i < inputGraph->terminalList->size(); i++)
   {
     /*Armazena ID do vertice (terminal) atual*/
-    int currentTerminalId = graph->terminalList->at(i)->vertex.id;
+    int currentTerminalId = inputGraph->terminalList->at(i)->vertex.id;
 
-    for (unsigned int i = 0; i < graph->adjacencyList->size(); i++)
+    for (unsigned int i = 0; i < inputGraph->adjacencyList->size(); i++)
     {
       /*Indica que a distancia entre o vertice corrente e o vertice
       de origem ainda nao foi definida*/
@@ -319,9 +336,12 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* graph)
       /*Sempre considera o primeiro vertice do heap*/
       auxVertex = *(fakeVertices.at(0)); //teste - pegar o primeiro terminal, ao inves desse
 
-      for (unsigned int k = 0; k < graph->adjacencyList->at(auxVertex.id - 1).adjacencies.size(); k++)
+      for (unsigned int k = 0;
+           k < inputGraph->adjacencyList->at(auxVertex.id - 1).adjacencies.size();
+           k++)
       {
-        neighbourInfo = graph->adjacencyList->at(auxVertex.id - 1).adjacencies.at(k);
+        neighbourInfo = inputGraph->adjacencyList->at(auxVertex.id - 1).
+          adjacencies.at(k);
 
         /*Evita calcular distancia duas vezes*/
         if (neighbourInfo.id != auxVertex.previousVertexId)
@@ -345,15 +365,15 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* graph)
     MinimalRouteInfo auxMinimalRouteInfo;    
 
     /*Laco que identifica rota e seu custo minimo*/
-    for (unsigned int j = 0; j < graph->terminalList->size(); j++)
+    for (unsigned int j = 0; j < inputGraph->terminalList->size(); j++)
     {
       /*Variavel que indica o ID do terminal para o qual deseja-se
       calcular a distancia menos custosa*/
-      int nextId = graph->terminalList->at(j)->vertex.id;
+      int nextId = inputGraph->terminalList->at(j)->vertex.id;
       /*Nao ha necessidade de calcular rota para si proprio*/
       if (currentTerminalId != nextId)
       {
-        /*Obtem custo da distancia entre o terminal corrente e sua adjacencia corrente*/
+        /*Obtem custo da distancia entre o terminal corrente e seu adjacente (outro terminal)*/
         auxMinimalRouteInfo.weight = openVertices.at(nextId - 1).distanceFromSource;
         /*Certifica-se de que a rota 'i' nao se confunda com a rota 'j'*/
         auxMinimalRouteInfo.route.clear();
@@ -381,6 +401,36 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* graph)
 /*Funcao que cria um grafo completo, em que os vertices sao os terminais e o
 peso das arestas que os une eh a distancia de menor custo entre cada um dos
 terminais (valor calculado via Dijkstra)*/
+/*
+vector<vector<Edge>>* createCompleteGraph(vector<vector<MinimalRouteInfo>>* dijkstraResult)
+{
+  vector<vector<Edge>>* completeGraph =
+    new vector<vector<Edge>>(dijkstraResult->size());
+  Edge edge;
+  unsigned int numVertices = dijkstraResult->size();
+  //unsigned int numAdjacencies;
+  unsigned int firstVertex;
+  unsigned int lastVertex;
+  unsigned int weight;
+
+  for (unsigned int i = 0; i < numVertices; i++)
+  {
+    for (unsigned int j = 0; j < numVertices; j++)
+    {
+      firstVertex = dijkstraResult->at(i).at(j).route.at(dijkstraResult->at(i).
+        at(j).route.size() - 1);
+      lastVertex = dijkstraResult->at(i).at(j).route.at(0);
+      weight = dijkstraResult->at(i).at(j).weight;
+      edge.vertexId = firstVertex;
+      edge.vertex2Id = lastVertex;
+      edge.weight = weight;
+      completeGraph->at(i).push_back(edge);
+    }
+  }
+
+  return completeGraph;
+}
+*/
 Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>* dijkstraResult)
 {
   Graph* completeGraph = new Graph;
@@ -405,5 +455,74 @@ Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>* dijkstraResult)
       adjacencyInfo.weight = dijkstraResult->at(i).at(j).weight;
       completeGraph->adjacencyList->at(i).adjacencies.push_back(adjacencyInfo);
     }
+  }
+
+  return completeGraph;
+}
+
+/*Funcao auxiliar que usada na criacao/ajuste do heap binario
+para o algoritmo de Kruskal*/
+bool compareKruskal(Edge& edge, Edge& edge2)
+{
+  return edge.weight < edge2.weight;
+}
+
+/*Função que verifica se um grafo possui algum ciclo, atraves
+do uso do algoritmo DFS*/
+bool hasCycle(Graph* mst)
+{
+
+}
+
+void generateMST(Graph* completeGraph)
+{
+  /*Usar essa ideia de 'size' na funcao acima...*/
+  unsigned int size = completeGraph->adjacencyList->size();
+  vector<Edge>* edgeList = new vector<Edge>;
+  Graph mst;
+  mst.adjacencyList = new vector<Adjacencies>(size);
+  AdjacencyInfo adjacenyInfo;
+  Edge edge;
+  set<int> treeVertexSet;
+
+  for (unsigned int i = 0; i < size; i++)
+  {
+    for (unsigned int j = i + 1, k = 0; j < size; j++, k++)
+    {
+      edge.vertexId = completeGraph->adjacencyList->at(i).vertex.id;
+      edge.vertex2Id = completeGraph->adjacencyList->at(i).adjacencies.at(j - 1).id;
+      edge.weight = completeGraph->adjacencyList->at(i).adjacencies.at(j - 1).weight;
+      edgeList->push_back(edge);
+    }
+  }
+
+  sort(edgeList->begin(), edgeList->end(), compareKruskal);
+  treeVertexSet.insert(edgeList->at(0).vertexId);
+  treeVertexSet.insert(edgeList->at(0).vertex2Id);
+  adjacenyInfo.id = edgeList->at(0).vertex2Id;
+  adjacenyInfo.weight = edgeList->at(0).weight;
+
+  /*mst.adjacencyList->at(edgeList->at(0).vertexId - 1).adjacencies.at(0).id =
+    ;
+  mst.adjacencyList->at(edgeList->at(0).vertexId - 1).adjacencies.at(0).weight =
+    edgeList->at(0).weight;*/
+  mst.adjacencyList->at(edgeList->at(0).vertexId - 1).adjacencies.
+    push_back(adjacenyInfo);
+
+  unsigned int i = 1;
+
+  while (treeVertexSet.size() < size)
+  {
+    if (!hasCycle(&mst))
+    {
+      adjacenyInfo.id = edgeList->at(i).vertex2Id;
+      adjacenyInfo.weight = edgeList->at(i).weight;
+      mst.adjacencyList->at(edgeList->at(i).vertexId - 1).adjacencies.
+        push_back(adjacenyInfo);
+      treeVertexSet.insert(edgeList->at(i).vertexId);
+      treeVertexSet.insert(edgeList->at(i).vertex2Id);
+    }
+
+    i++;
   }
 }
