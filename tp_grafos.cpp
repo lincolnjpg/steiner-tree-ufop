@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <climits>
+#include <chrono>
 
 /*Mensages*/
 const char MSG_PARAMS_ERROR[] =
@@ -15,6 +16,7 @@ const char MSG_OPEN_FILE_ERROR[] =
   "Nao foi possivel abrir o arquivo especificado";
 
 using namespace std;
+using namespace std::chrono;
 
 /*Structs*/
 typedef struct tAdjacencyInfo
@@ -78,7 +80,7 @@ void insertMST(Graph*, const int&, const unsigned int&, const int&, const int&);
 void removeMST(Graph*, const unsigned int&, const unsigned int&);
 bool compareKruskal(Edge&, Edge&);
 Graph* generateMST(Graph*);
-bool hasCycle(Graph*, set<int>*, int, int);
+bool hasCycle(Graph*, set<int>*, map<int, int>, int, int);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
@@ -109,11 +111,23 @@ int main(int argc, char* argv[])
     if (returnedValue)
       printf("%s %u\n", MSG_READFILE_ERROR, returnedValue);
 
+    //trecho medicao tempo (1) - inicio
+    duration<double> time_span2;
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+    //trecho medicao tempo (1) - fim
+
     dijkstraResult = shortestPath(inputGraph);
 
     terminalsCompleteGraph = createCompleteGraph(dijkstraResult);
     //Algoritmo de Kruskal
     mst = generateMST(terminalsCompleteGraph);
+
+    //trecho medicao tempo (2) - inicio
+    high_resolution_clock::time_point t2 = high_resolution_clock::now();
+    duration<double> time_span = duration_cast<duration<double> >(t2 - t1);
+    //trecho medicao tempo (2) - fim
+
+    cout << time_span.count() << endl;
 
     fclose(file);
 
@@ -479,18 +493,21 @@ bool compareKruskal(Edge& edge, Edge& edge2)
 
 /*Função que verifica se um grafo possui algum ciclo, atraves
 do uso do algoritmo DFS*/
-bool hasCycle(Graph* mst, set<int>* visitedVertices, int sourceIndex,
+bool hasCycle(Graph* mst, set<int>* visitedVertices,
+              map<int, int>* distinctVertices, int sourceIndex,
               int parentId)
 {
   unsigned int i = 0;
   int vertexId = mst->adjacencyList->at(sourceIndex).vertex.id;
   int neighbourId;
+  int index;
 
   visitedVertices->insert(vertexId);
 
   while (i < mst->adjacencyList->at(sourceIndex).adjacencies.size())
   {
     neighbourId = mst->adjacencyList->at(sourceIndex).adjacencies.at(i).id;
+    index = distinctVertices->find(neighbourId)->second;
     i++;
 
     if (visitedVertices->find(neighbourId) == visitedVertices->end())
@@ -500,9 +517,11 @@ bool hasCycle(Graph* mst, set<int>* visitedVertices, int sourceIndex,
       /*Vizinho corrente eh inserido no conjunto de vertices visitados*/
       visitedVertices->insert(neighbourId);
       /*Chamada recursiva*/
-      return hasCycle(mst, visitedVertices, i, vertexId);
+      if (hasCycle(mst, visitedVertices, distinctVertices, index, vertexId))
+        /*Interrompe busca caso seja detectado*/
+        return true;
     }
-    else if (neighbourId != /*mst->adjacencyList->at(parentId).vertex.id*/parentId)
+    else if (neighbourId != parentId)
     {
       /*Vizinho corrente ja foi visitado e foi alcancado
       a partir de outro vertice: ciclo detectado*/
@@ -573,7 +592,7 @@ Graph* generateMST(Graph* completeGraph)
 
     visitedVertices.clear();
 
-    if (hasCycle(mst, &visitedVertices, 0, -1))
+    if (hasCycle(mst, &visitedVertices, &distinctVertices, 0, -1))
     {      
       removeMST(mst, vertexIndex, vertex2Index);
 
