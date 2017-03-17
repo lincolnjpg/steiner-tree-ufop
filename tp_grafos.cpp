@@ -19,16 +19,16 @@ using namespace std;
 using namespace std::chrono;
 
 /*Structs*/
-typedef struct tAdjacencyInfo
+typedef struct tShortestPathInfo
 {
-  int id;
   unsigned int weight;
-} AdjacencyInfo;
+  vector<int> path;
+} ShortestPathInfo;
 
 typedef struct tVertex
 {
   int id = -1;
-  bool isTerminal;
+  vector<ShortestPathInfo> shortestPathInfo;
 } Vertex;
 
 typedef struct tEdge
@@ -38,17 +38,10 @@ typedef struct tEdge
   unsigned int weight;
 } Edge;
 
-typedef struct tMinimalRouteInfo
-{
-  unsigned int weight;
-  vector<int> route;
-} MinimalRouteInfo;
-
 typedef struct tDijkstraVertex : Vertex
 {
   unsigned int distanceFromSource;
   int previousVertexId;
-  vector<MinimalRouteInfo> minimalRouteInfo;
 } DijkstraVertex;
 
 typedef struct tPointerVertex
@@ -56,6 +49,12 @@ typedef struct tPointerVertex
   int id;
   DijkstraVertex* realVertex;
 } PointerVertex;
+
+typedef struct tAdjacencyInfo
+{
+  int id;
+  unsigned int weight;
+} AdjacencyInfo;
 
 typedef struct tAdjacencies
 {
@@ -69,29 +68,36 @@ typedef struct tGraph
   vector<Adjacencies*>* terminalList;
 } Graph;
 
+/*Typedefs*/
+typedef vector<vector<ShortestPathInfo>> ShortestPaths;
+
 /*Declaracao de funcoes*/
 unsigned int readFile(FILE*, Graph**);
 unsigned int readEdges(FILE*, Graph*, const unsigned int&);
 bool readTerminals(FILE*, Graph*, const unsigned int&);
 bool compare(DijkstraVertex*&, DijkstraVertex*&);
-vector<vector<MinimalRouteInfo>>* shortestPath(Graph*);
-Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>*);
-void insertMST(Graph*, const int&, const unsigned int&, const int&, const int&);
+ShortestPaths* dijkstra(Graph*);
+Graph* createCompleteGraph(ShortestPaths*);
+void insertMST(Graph*, ShortestPaths*, const int&, const unsigned int&,
+               const int&, const int&);
 void removeMST(Graph*, const unsigned int&, const unsigned int&);
 bool compareKruskal(Edge&, Edge&);
-Graph* generateMST(Graph*);
-bool hasCycle(Graph*, set<int>*, map<int, int>, int, int);
+Graph* generateMST(Graph*, map<int, int>*);
+bool hasCycle(Graph*, set<int>*, map<int, int>*, int, int);
+void mstEdgeAdjustment(Graph*, ShortestPaths*, map<int, int>*);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
 {
   unsigned int returnedValue;
-  Graph* inputGraph = NULL;
-  Graph* terminalsCompleteGraph = NULL;
-  Graph* mst;
+  Graph* inputGraph = nullptr;
+  Graph* terminalsCompleteGraph = nullptr;
+  Graph* mst = nullptr;
+  map<int, int> distinctVertices;
+  Graph* steinerTree = nullptr;
 
-  vector<vector<MinimalRouteInfo>>* dijkstraResult;
-  FILE* file = NULL;
+  ShortestPaths* dijkstraResult;
+  FILE* file = nullptr;
 
   if (argc == 2)
   {
@@ -116,11 +122,13 @@ int main(int argc, char* argv[])
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
     //trecho medicao tempo (1) - fim
 
-    dijkstraResult = shortestPath(inputGraph);
+    dijkstraResult = dijkstra(inputGraph);
 
     terminalsCompleteGraph = createCompleteGraph(dijkstraResult);
     //Algoritmo de Kruskal
-    mst = generateMST(terminalsCompleteGraph);
+    mst = generateMST(terminalsCompleteGraph, &distinctVertices);
+    //Ajusta arestas da MST, de acordo com o caminho mais curto
+    mstEdgeAdjustment(mst, dijkstraResult, &distinctVertices);
 
     //trecho medicao tempo (2) - inicio
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
@@ -207,19 +215,6 @@ unsigned int readFile(FILE* file, Graph** inputGraph)
   if (error)
     return 7;
 
-  //Test - begin
-  /*
-  for (unsigned int i = 0; i < numVertices; i++)
-  {
-    printf("vetor na posicao %u, %u:\n", i + 1, (*graph)->adjacencyList->at(i).vertex.isTerminal);
-
-    for (unsigned int j = 0; j < (*graph)->adjacencyList->at(i).adjacencies.size(); j++)
-      printf("%u, %u\n", (*graph)->adjacencyList->at(i).adjacencies.at(j).id,
-             (*graph)->adjacencyList->at(i).adjacencies.at(j).weight);
-  }
-  */
-  //Test - end
-
   //Sem erro na manipulacao do arquivo
   return 0;
 }
@@ -236,7 +231,7 @@ unsigned int readEdges(FILE* file, Graph* inputGraph,
 
   for (unsigned int i = 0; i < numEdges; i++)
   {
-    fscanf(file, "%c %u %u %u %*[\r] %*[\n]", aux, &vertex, &vertex2, &weight);
+    fscanf(file, "%c %d %d %u %*[\r] %*[\n]", aux, &vertex, &vertex2, &weight);
 
     if (ferror(file))
       return 1;
@@ -246,10 +241,7 @@ unsigned int readEdges(FILE* file, Graph* inputGraph,
     auxAdjacencyInfo.weight = weight;
 
     if (inputGraph->adjacencyList->at(vertex - 1).adjacencies.size() == 0)
-    {
       inputGraph->adjacencyList->at(vertex - 1).vertex.id = vertex;
-      inputGraph->adjacencyList->at(vertex - 1).vertex.isTerminal = false;
-    }
 
     inputGraph->adjacencyList->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
 
@@ -258,10 +250,7 @@ unsigned int readEdges(FILE* file, Graph* inputGraph,
     auxAdjacencyInfo.weight = weight;
 
     if (inputGraph->adjacencyList->at(vertex2 - 1).adjacencies.size() == 0)
-    {
       inputGraph->adjacencyList->at(vertex2 - 1).vertex.id = vertex2;
-      inputGraph->adjacencyList->at(vertex2 - 1).vertex.isTerminal = false;
-    }
 
     inputGraph->adjacencyList->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
   }
@@ -284,12 +273,11 @@ bool readTerminals(FILE* file, Graph* inputGraph, const unsigned int& numTermina
 
   for (unsigned int i = 0; i < numTerminals; i++)
   {
-    fscanf(file, "%c %u %*[\r] %*[\n]", aux, &vertex);
+    fscanf(file, "%c %d %*[\r] %*[\n]", aux, &vertex);
 
     if (ferror(file))
       return true;
 
-    inputGraph->adjacencyList->at(vertex - 1).vertex.isTerminal = true;
     inputGraph->terminalList->at(i) = &(inputGraph->adjacencyList->at(vertex - 1));
   }
 
@@ -304,15 +292,14 @@ bool compare(DijkstraVertex*& ptr, DijkstraVertex*& ptr2)
 }
 
 /*Funcao que executa o algoritmo de Dijkstra*/
-vector<vector<MinimalRouteInfo>>* shortestPath(Graph* inputGraph)
+ShortestPaths* dijkstra(Graph* inputGraph)
 {
   unsigned int newDistance;
   DijkstraVertex auxVertex;
   AdjacencyInfo neighbourInfo;
   vector<DijkstraVertex*> fakeVertices(inputGraph->adjacencyList->size());
   vector<DijkstraVertex> openVertices(inputGraph->adjacencyList->size());
-  vector<vector<MinimalRouteInfo>>* result =
-    new vector<vector<MinimalRouteInfo>>(inputGraph->terminalList->size());
+  ShortestPaths* result = new ShortestPaths(inputGraph->terminalList->size());
 
   /*Inicializacao do conjunto que representa os vertices abertos*/
   for (unsigned int i = 0; i < inputGraph->adjacencyList->size(); i++)
@@ -367,8 +354,7 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* inputGraph)
           newDistance = auxVertex.distanceFromSource + neighbourInfo.weight;
 
         if (newDistance < openVertices.at(neighbourInfo.id - 1).distanceFromSource)
-        {
-          //TODO:armazenar isto fora do no... quem sabe
+        {          
           openVertices.at(neighbourInfo.id - 1).distanceFromSource = newDistance;
           openVertices.at(neighbourInfo.id - 1).previousVertexId = auxVertex.id;
         }
@@ -381,7 +367,7 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* inputGraph)
       j++;
     }
 
-    MinimalRouteInfo auxMinimalRouteInfo;    
+    ShortestPathInfo auxShortestPathInfo;
 
     /*Laco que identifica rota e seu custo minimo*/
     for (unsigned int j = 0; j < inputGraph->terminalList->size(); j++)
@@ -393,23 +379,23 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* inputGraph)
       if (currentTerminalId != nextId)
       {
         /*Obtem custo da distancia entre o terminal corrente e seu adjacente (outro terminal)*/
-        auxMinimalRouteInfo.weight = openVertices.at(nextId - 1).distanceFromSource;
+        auxShortestPathInfo.weight = openVertices.at(nextId - 1).distanceFromSource;
         /*Certifica-se de que a rota 'i' nao se confunda com a rota 'j'*/
-        auxMinimalRouteInfo.route.clear();
+        auxShortestPathInfo.path.clear();
 
         //while (nextId != graph->terminalList->at(i + 1)->vertex.id)
         while (nextId != openVertices.at(nextId - 1).previousVertexId)
         {   
           /*Insere ID no vertice na rota*/
-          auxMinimalRouteInfo.route.push_back(nextId);
+          auxShortestPathInfo.path.push_back(nextId);
           /*Atualiza*/
           nextId = openVertices.at(nextId - 1).previousVertexId;
         }
 
         /*Insere ID do vertice de origem*/
-        auxMinimalRouteInfo.route.push_back(nextId);
+        auxShortestPathInfo.path.push_back(nextId);
         /*Insere informacao da rota na lista de terminais*/
-        result->at(i).push_back(auxMinimalRouteInfo);
+        result->at(i).push_back(auxShortestPathInfo);
       }
     }
   }
@@ -420,30 +406,38 @@ vector<vector<MinimalRouteInfo>>* shortestPath(Graph* inputGraph)
 /*Funcao que cria um grafo completo, em que os vertices sao os terminais e o
 peso das arestas que os une eh a distancia de menor custo entre cada um dos
 terminais (valor calculado via Dijkstra)*/
-Graph* createCompleteGraph(vector<vector<MinimalRouteInfo>>* dijkstraResult)
+Graph* createCompleteGraph(ShortestPaths* dijkstraResult)
 {
+  //TODO: inserir rota minima da, variavel dijkstraResult, em completeGraph
   Graph* completeGraph = new Graph;
   completeGraph->adjacencyList = new vector<Adjacencies>(dijkstraResult->size());
   AdjacencyInfo adjacencyInfo;
-  unsigned int numVertices = dijkstraResult->size();
+  ShortestPathInfo pathInfo;
+  unsigned int numTerminals = dijkstraResult->size();
   unsigned int numAdjacencies;
   unsigned int firstVertex;
   unsigned int lastVertex;
 
-  for (unsigned int i = 0; i < numVertices; i++)
+  for (unsigned int i = 0; i < numTerminals; i++)
   {
     numAdjacencies = dijkstraResult->at(i).size();
 
     for (unsigned int j = 0; j < numAdjacencies; j++)
     {
-      firstVertex = dijkstraResult->at(i).at(j).route.at(dijkstraResult->at(i).
-        at(j).route.size() - 1);
-      lastVertex = dijkstraResult->at(i).at(j).route.at(0);
+      firstVertex = dijkstraResult->at(i).at(j).path.at(dijkstraResult->at(i).
+        at(j).path.size() - 1);
+      lastVertex = dijkstraResult->at(i).at(j).path.at(0);
       completeGraph->adjacencyList->at(i).vertex.id = firstVertex;
       adjacencyInfo.id = lastVertex;
       adjacencyInfo.weight = dijkstraResult->at(i).at(j).weight;
       completeGraph->adjacencyList->at(i).adjacencies.push_back(adjacencyInfo);
+      pathInfo.path = dijkstraResult->at(i).at(j).path;
+      pathInfo.weight = dijkstraResult->at(i).at(j).weight;
+      completeGraph->adjacencyList->at(i).vertex.shortestPathInfo.push_back(
+        pathInfo);
     }
+
+    //for (unsigned int j = 0; j < dijkstraResult->at(i).size())
   }
 
   return completeGraph;
@@ -454,14 +448,10 @@ void insertMST(Graph* mst, const int& vertex, const unsigned int& index,
                const int& vertex2, const int& weight)
 {
   AdjacencyInfo adjacencyInfo;
-  //map<int, int>::iterator it;
 
   //Atualiza dados da adjacencia a ser inserida na MST
   adjacencyInfo.id = vertex2;
   adjacencyInfo.weight = weight;
-
-  //Obtem a posicao correta de insercao do vertice na MST
-  //it = distinctVertices->find(vertex);
 
   /*Vertice vertex  eh inserido, juntamente com sua adjacencia, na
   arvore geradora minima*/
@@ -532,21 +522,19 @@ bool hasCycle(Graph* mst, set<int>* visitedVertices,
   return false;
 }
 
-Graph* generateMST(Graph* completeGraph)
+Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 {
   /*Usar essa ideia de 'size' na funcao acima...*/
   unsigned int size = completeGraph->adjacencyList->size();
   vector<Edge>* edgeList = new vector<Edge>;
   Graph* mst = new Graph;
   mst->adjacencyList = new vector<Adjacencies>(size);
-  Edge edge;
-  map<int, int> distinctVertices;
+  Edge edge;  
   set<int> visitedVertices;
   pair<map<int, int>::iterator, bool> resultPair;
   pair<map<int, int>::iterator, bool> resultPair2;
   unsigned int vertexIndex;
   unsigned int vertex2Index;
-
 
   /*Gera lista de arestas existentes no grafo completo, recebido como paramtro*/
   for (unsigned int i = 0; i < size; i++)
@@ -566,18 +554,18 @@ Graph* generateMST(Graph* completeGraph)
   unsigned int i = 0;
   unsigned int insertionIndex = 0;  
 
-  while (distinctVertices.size() < size)
+  while (distinctVertices->size() < size)
   {
     /*Tenta inserir os dois vertices a aresta corrente no conjunto de
     vertices distintos*/ //TODO: map.insert() pode retornar o par inserido
-    resultPair = distinctVertices.insert(
+    resultPair = distinctVertices->insert(
       pair<int, int>(edgeList->at(i).vertexId, insertionIndex));
     vertexIndex = resultPair.first->second;
 
     if (resultPair.second)
       insertionIndex++;
 
-    resultPair2 = distinctVertices.insert(
+    resultPair2 = distinctVertices->insert(
       pair<int, int>(edgeList->at(i).vertex2Id, insertionIndex));
     vertex2Index = resultPair2.first->second;
 
@@ -592,14 +580,14 @@ Graph* generateMST(Graph* completeGraph)
 
     visitedVertices.clear();
 
-    if (hasCycle(mst, &visitedVertices, &distinctVertices, 0, -1))
+    if (hasCycle(mst, &visitedVertices, distinctVertices, 0, -1))
     {      
       removeMST(mst, vertexIndex, vertex2Index);
 
       if (resultPair.second)
       {
         /*Se vertex foi inserido, sera removido*/
-        distinctVertices.erase(resultPair.first);
+        distinctVertices->erase(resultPair.first);
 
         insertionIndex--;
       }
@@ -607,38 +595,64 @@ Graph* generateMST(Graph* completeGraph)
       if (resultPair2.second)
       {
         /*Se vertex2 foi inserido, sera removido*/
-        distinctVertices.erase(resultPair2.first);
+        distinctVertices->erase(resultPair2.first);
 
         insertionIndex--;
       }
-
-      /*
-      //Atualiza dados da adjacencia a ser inserida na MST
-      adjacencyInfo.id = edgeList->at(i).vertex2Id;
-      adjacencyInfo.weight = edgeList->at(i).weight;
-
-      //it->second aqui sera igual a 0
-      //Obtem a posicao correta de insercao do vertice na MST
-      it = distinctVertices.find(edgeList->at(i).vertexId);
-      //Insere adjacencia na MST
-      mst->adjacencyList->at(it->second).vertex.id = edgeList->at(i).vertexId;
-      mst->adjacencyList->at(it->second).adjacencies.push_back(adjacencyInfo);
-
-      //Atualiza dados da adjacencia a ser inserida na MST
-      adjacencyInfo.id = edgeList->at(i).vertexId;
-      adjacencyInfo.weight = edgeList->at(i).weight;
-
-      //it->second aqui sera igual a 1
-      //Obtem a posicao correta de insercao do vertice na MST
-      it = distinctVertices.find(edgeList->at(i).vertex2Id);
-      //Insere adjacencia na MST
-      mst->adjacencyList->at(it->second).vertex.id = edgeList->at(i).vertex2Id;
-      mst->adjacencyList->at(it->second).adjacencies.push_back(adjacencyInfo);
-      */
     }
 
     i++;
   }
 
   return mst;
+}
+
+/*Funcao que insere caminhos de menor custo na arvore geradora minima*/
+void mstEdgeAdjustment(Graph* mst, ShortestPaths* dijkstraResult,
+                       map<int, int>* distinctVertices)
+{
+  int vertexId;
+  int index;
+  unsigned int mstAdjacencies;
+  unsigned int dijkstraAdjacencies;
+  ShortestPathInfo pathInfo;
+
+  /*Primeiro passo: atualiza arvore geradora minima com caminhos de menor custo*/
+
+  /*Para cada um dos vertices da arvore geradora minima*/
+  for (unsigned int i = 0; i < mst->adjacencyList->size(); i++)
+  {
+    vertexId = mst->adjacencyList->at(i).vertex.id;
+    mstAdjacencies = mst->adjacencyList->at(i).adjacencies.size();
+
+    /*Para cada uma das adjacencias de todos os vertices da
+    arvore geradora minima*/
+    for (unsigned int j = 0; j < mstAdjacencies; j++)
+    {
+      index = distinctVertices->find(vertexId)->second;
+      dijkstraAdjacencies = dijkstraResult->at(index).size();
+
+      /*Para cada uma das adjacencias dos vertices retornados pela
+      funcao que calcula o caminho de menor custo*/
+      for (unsigned int k = 0; k < dijkstraAdjacencies; k++)
+      {
+        if (dijkstraResult->at(index).at(k).path.at(0) ==
+            mst->adjacencyList->at(i).adjacencies.at(j).id)
+        {
+          /*Encontrou caminho de menor custo dentre: insere na
+          arvore geradora minima*/
+          pathInfo.path = dijkstraResult->at(index).at(k).path;
+          pathInfo.weight = dijkstraResult->at(index).at(k).weight;
+          mst->adjacencyList->at(i).vertex.shortestPathInfo.push_back(pathInfo);
+        }
+
+        /*TODO: montar [nova] arvore de steiner aqui*/
+      }
+    }
+  }
+
+  /*Segundo passo: substitui arestas determinadas por generateMST() pelos
+  caminhos de custo minimo, gerados por shortestPaths()*/
+
+
 }
