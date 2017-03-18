@@ -36,6 +36,7 @@ typedef struct tEdge
   int vertexId;
   int vertex2Id;
   unsigned int weight;
+  vector<int> realPath;
 } Edge;
 
 typedef struct tDijkstraVertex : Vertex
@@ -408,7 +409,6 @@ peso das arestas que os une eh a distancia de menor custo entre cada um dos
 terminais (valor calculado via Dijkstra)*/
 Graph* createCompleteGraph(ShortestPaths* dijkstraResult)
 {
-  //TODO: inserir rota minima da, variavel dijkstraResult, em completeGraph
   Graph* completeGraph = new Graph;
   completeGraph->adjacencyList = new vector<Adjacencies>(dijkstraResult->size());
   AdjacencyInfo adjacencyInfo;
@@ -436,8 +436,6 @@ Graph* createCompleteGraph(ShortestPaths* dijkstraResult)
       completeGraph->adjacencyList->at(i).vertex.shortestPathInfo.push_back(
         pathInfo);
     }
-
-    //for (unsigned int j = 0; j < dijkstraResult->at(i).size())
   }
 
   return completeGraph;
@@ -539,11 +537,13 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
   /*Gera lista de arestas existentes no grafo completo, recebido como paramtro*/
   for (unsigned int i = 0; i < size; i++)
   {
-    for (unsigned int j = i + 1, k = 0; j < size; j++, k++)
+    for (unsigned int j = i + 1; j < size; j++)
     {
       edge.vertexId = completeGraph->adjacencyList->at(i).vertex.id;
       edge.vertex2Id = completeGraph->adjacencyList->at(i).adjacencies.at(j - 1).id;
       edge.weight = completeGraph->adjacencyList->at(i).adjacencies.at(j - 1).weight;
+      edge.realPath = completeGraph->adjacencyList->at(i).vertex.
+        shortestPathInfo.at(j - 1).path;
       edgeList->push_back(edge);
     }
   }
@@ -552,11 +552,13 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
   sort(edgeList->begin(), edgeList->end(), compareKruskal);
 
   unsigned int i = 0;
+  unsigned int insertedEdges = 0;
   unsigned int insertionIndex = 0;  
 
-  while (distinctVertices->size() < size)
+  /*Numa arvore, n = m - 1*/
+  while (insertedEdges < size - 1)
   {
-    /*Tenta inserir os dois vertices a aresta corrente no conjunto de
+    /*Tenta inserir os dois vertices da aresta corrente no conjunto de
     vertices distintos*/ //TODO: map.insert() pode retornar o par inserido
     resultPair = distinctVertices->insert(
       pair<int, int>(edgeList->at(i).vertexId, insertionIndex));
@@ -599,6 +601,10 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 
         insertionIndex--;
       }
+    }
+    else
+    {
+      insertedEdges++;
     }
 
     i++;
