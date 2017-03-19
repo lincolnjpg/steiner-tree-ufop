@@ -587,7 +587,7 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 
   unsigned int i = 0;
   unsigned int insertedEdges = 0;
-  unsigned int insertionIndex = 0;  
+  unsigned int insertionIndex = 0;
 
   /*Numa arvore, n = m - 1*/
   while (insertedEdges < size - 1)
@@ -617,13 +617,13 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 
     visitedVertices.clear();
 
-    if (hasCycle(mst, &visitedVertices, distinctVertices, 0, -1))
-    {      
+    if (hasCycle(mst, &visitedVertices, distinctVertices, vertexIndex, -1))
+    {
       removeMST(mst, vertexIndex, vertex2Index);
 
       if (resultPair.second)
         /*Se vertex foi inserido, sera removido*/
-        distinctVertices->erase(resultPair.first);        
+        distinctVertices->erase(resultPair.first);
 
       if (resultPair2.second)
         /*Se vertex2 foi inserido, sera removido*/
