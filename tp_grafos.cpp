@@ -94,6 +94,7 @@ void mstEdgeAdjustment(Graph*, ShortestPaths*, map<int, int>*);
 void insertSteiner(SteinerTree*, const int&, const unsigned int&, const int&,
                    const unsigned int&);
 SteinerTree* generateSteinerTree(Graph*, Graph*);
+void printResults(SteinerTree*);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
@@ -147,6 +148,8 @@ int main(int argc, char* argv[])
     //trecho medicao tempo (2) - fim
 
     cout << time_span.count() << endl;
+
+    printResults(steinerTree);
 
     fclose(file);
 
@@ -776,4 +779,32 @@ SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
   steinerTree->totalWeight /= 2;
 
   return steinerTree;
+}
+
+void printResults(SteinerTree* steinerTree)
+{
+  unsigned int i = 0;
+  int vertexId;
+  set<int> distinctVertices;
+
+  while (steinerTree->adjacencyList->at(i).vertex.id != -1)
+  {
+    vertexId = steinerTree->adjacencyList->at(i).vertex.id;
+    distinctVertices.insert(vertexId);
+
+    for (unsigned int j = 0; j < steinerTree->adjacencyList->at(i).adjacencies.size(); j++)
+    {
+      vertexId = steinerTree->adjacencyList->at(i).adjacencies.at(j).id;
+      distinctVertices.insert(vertexId);
+    }
+
+    i++;
+  }
+
+  printf("Vertices (%u): ", distinctVertices.size());
+
+  for (set<int>::iterator it = distinctVertices.begin(); it != distinctVertices.end(); it++)
+    printf("%d, ", *it);
+
+  printf("Custo: %d\n", steinerTree->totalWeight);
 }
