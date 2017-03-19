@@ -69,10 +69,9 @@ typedef struct tGraph
   vector<Adjacencies*>* terminalList;
 } Graph;
 
-typedef struct tSteinerTree
+typedef struct tSteinerTree : Graph
 {
-  vector<Edge> edgeList;
-  unsigned int weight;
+  unsigned int totalWeight;
 } SteinerTree;
 
 /*Typedefs*/
@@ -92,6 +91,8 @@ bool compareKruskal(Edge&, Edge&);
 Graph* generateMST(Graph*, map<int, int>*);
 bool hasCycle(Graph*, set<int>*, map<int, int>*, int, int);
 void mstEdgeAdjustment(Graph*, ShortestPaths*, map<int, int>*);
+void insertSteiner(SteinerTree*, const int&, const unsigned int&, const int&,
+                   const unsigned int&);
 SteinerTree* generateSteinerTree(Graph*, Graph*);
 
 /*Funcao principal*/
@@ -492,17 +493,27 @@ void insertMST(Graph* mst, Edge& edge, const unsigned int& index,
 void removeMST(Graph* mst, const unsigned int& index,
                const unsigned int& index2)
 {
-  mst->adjacencyList->at(index).adjacencies.pop_back();
-  mst->adjacencyList->at(index).vertex.shortestPathInfo.pop_back();
+  if (mst->adjacencyList->at(index).adjacencies.size() > 0)
+  {
+    mst->adjacencyList->at(index).adjacencies.pop_back();
 
-  if (mst->adjacencyList->at(index).adjacencies.size() == 0)
-    mst->adjacencyList->at(index).vertex.id = -1;
+    if (mst->adjacencyList->at(index).adjacencies.size() == 0)
+      mst->adjacencyList->at(index).vertex.id = -1;
+  }
 
-  mst->adjacencyList->at(index2).adjacencies.pop_back();
-  mst->adjacencyList->at(index2).vertex.shortestPathInfo.pop_back();
+  if (mst->adjacencyList->at(index).vertex.shortestPathInfo.size() > 0)
+    mst->adjacencyList->at(index).vertex.shortestPathInfo.pop_back();
 
-  if (mst->adjacencyList->at(index2).adjacencies.size() == 0)
-    mst->adjacencyList->at(index2).vertex.id = -1;
+  if (mst->adjacencyList->at(index2).adjacencies.size() > 0)
+  {
+    mst->adjacencyList->at(index2).adjacencies.pop_back();
+
+    if (mst->adjacencyList->at(index2).adjacencies.size() == 0)
+      mst->adjacencyList->at(index2).vertex.id = -1;
+  }
+
+  if (mst->adjacencyList->at(index2).vertex.shortestPathInfo.size() > 0)
+    mst->adjacencyList->at(index2).vertex.shortestPathInfo.pop_back();
 }
 
 /*Funcao auxiliar que eh usada na criacao/ajuste do heap binario
@@ -555,6 +566,7 @@ bool hasCycle(Graph* mst, set<int>* visitedVertices,
 
 Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 {
+  //TODO: distinctVertices pode ser local... era pointeiro pq usava em outra funcao... usava isso pra preencher mst com shortest path (agora vem de completeGraph)
   /*Usar essa ideia de 'size' na funcao acima...*/
   unsigned int size = completeGraph->adjacencyList->size();
   vector<Edge>* edgeList = new vector<Edge>;
@@ -619,6 +631,7 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 
     if (hasCycle(mst, &visitedVertices, distinctVertices, vertexIndex, -1))
     {
+      /*Ciclo detectado*/
       removeMST(mst, vertexIndex, vertex2Index);
 
       if (resultPair.second)
@@ -642,19 +655,51 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
   return mst;
 }
 
+void insertSteiner(SteinerTree* steinerTree, const int& vertexId,
+                   const unsigned int& index, const int& vertex2Id,
+                   const unsigned int& index2)
+{
+  AdjacencyInfo adjacencyInfo;
+
+  //u - v
+  //Atualiza dados da adjacencia a ser inserida na MST
+  adjacencyInfo.id = vertex2Id;
+
+  /*Vertice vertex  eh inserido, juntamente com sua adjacencia, na
+  arvore geradora minima*/
+  steinerTree->adjacencyList->at(index).vertex.id = vertexId;
+  steinerTree->adjacencyList->at(index).adjacencies.push_back(adjacencyInfo);
+
+  //v - u
+  //Atualiza dados da adjacencia a ser inserida na MST
+  adjacencyInfo.id = vertexId;
+
+  /*Vertice vertex  eh inserido, juntamente com sua adjacencia, na
+  arvore geradora minima*/
+  steinerTree->adjacencyList->at(index2).vertex.id = vertex2Id;
+  steinerTree->adjacencyList->at(index2).adjacencies.push_back(adjacencyInfo);
+}
+
 SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
 {
   SteinerTree* steinerTree;
   Edge edge;
-  set<int> distinctVertices;
+  set<int> visitedVertices;
+  map<int, int> distinctVertices;
+  pair<map<int, int>::iterator, bool> resultPair;
+  pair<map<int, int>::iterator, bool> resultPair2;
   unsigned int numPaths;
   unsigned int pathSize;
   unsigned int weight;
+  unsigned int vertexIndex;
+  unsigned int vertex2Index;
+  unsigned int insertionIndex = 0;
   int vertexId;
   int vertex2Id;
 
   steinerTree = new SteinerTree;
-  steinerTree->weight = 0;
+  steinerTree->adjacencyList = new vector<Adjacencies>(inputGraph->adjacencyList->size());
+  steinerTree->totalWeight = 0;
 
   for (unsigned int i = 0; i < mst->adjacencyList->size(); i++)
   {
@@ -665,132 +710,70 @@ SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
       pathSize = mst->adjacencyList->at(i).vertex.shortestPathInfo.at(j).path.size();
       vector<int>& path = mst->adjacencyList->at(i).vertex.shortestPathInfo.at(j).path;
 
-      int firstIndex = -1;
-      int lastIndex = -1;
-
-      for (unsigned int k = 0; k < pathSize; k++)
+      for (unsigned int k = 0; k < pathSize - 1; k++)
       {
-        if (distinctVertices.find(path.at(k)) != distinctVertices.end())
-        {
-          firstIndex = k;
+        resultPair = distinctVertices.insert(
+          pair<int, int>(path.at(k), insertionIndex));
+        vertexIndex = resultPair.first->second;
 
-          break;
-        }
-      }
+        if (resultPair.second)
+          insertionIndex++;
 
-      for (unsigned int k = pathSize - 1; k > 0; k--)
-      {
-        if (distinctVertices.find(path.at(k)) != distinctVertices.end())
-        {
-          lastIndex = k;
+        resultPair2 = distinctVertices.insert(
+          pair<int, int>(path.at(k + 1), insertionIndex));
+        vertex2Index = resultPair2.first->second;
 
-          break;
-        }
-      }
+        if (resultPair2.second)
+          insertionIndex++;
 
-      if (firstIndex != -1 && lastIndex != -1 && firstIndex != lastIndex)
-      {
-        /*Se entrou aqui, significa que ao menos dois vertices ja fazem parte
-        da arvore de steiner: subarvore a ser insere ser divida em duas partes*/
-        for (int k = 0; k < firstIndex; k++)
-        {
-          edge.vertexId = path.at(k);
-          distinctVertices.insert(edge.vertexId);
-          edge.vertex2Id = path.at(k + 1);
-          distinctVertices.insert(edge.vertex2Id);
-          steinerTree->edgeList.push_back(edge);
-        }
+        insertSteiner(steinerTree, path.at(k), vertexIndex, path.at(k + 1), vertex2Index);
 
-        for (int k = lastIndex; (unsigned int) k < pathSize - 1; k++)
+        visitedVertices.clear();
+
+        if (hasCycle(steinerTree, &visitedVertices, &distinctVertices, vertexIndex, -1))
         {
-          edge.vertexId = path.at(k);
-          distinctVertices.insert(edge.vertexId);
-          edge.vertex2Id = path.at(k + 1);
-          distinctVertices.insert(edge.vertex2Id);
-          steinerTree->edgeList.push_back(edge);
-        }
-      }
-      else
-      {
-        for (unsigned int k = 0; k < pathSize - 1; k++)
-        {
-          edge.vertexId = path.at(k);
-          distinctVertices.insert(edge.vertexId);
-          edge.vertex2Id = path.at(k + 1);
-          distinctVertices.insert(edge.vertex2Id);
-          steinerTree->edgeList.push_back(edge);
+          /*Ciclo detectado*/
+          removeMST(steinerTree, vertexIndex, vertex2Index);
+
+          if (resultPair.second)
+            /*Se vertex foi inserido, sera removido*/
+            distinctVertices.erase(resultPair.first);
+
+          if (resultPair2.second)
+            /*Se vertex2 foi inserido, sera removido*/
+            distinctVertices.erase(resultPair2.first);
         }
       }
     }
   }
 
-  for (unsigned int i = 0; i < steinerTree->edgeList.size(); i++)
+  for (unsigned int i = 0; i < steinerTree->adjacencyList->size(); i++)
   {
-    vertexId = steinerTree->edgeList.at(i).vertexId;
-    vertex2Id = steinerTree->edgeList.at(i).vertex2Id;
-
-    for (unsigned int j = 0; j < inputGraph->adjacencyList->at(vertexId - 1).
-         adjacencies.size(); j++)
+    if (steinerTree->adjacencyList->at(i).vertex.id != -1)
     {
-      if (inputGraph->adjacencyList->at(vertexId - 1).adjacencies.at(j).id == vertex2Id)
+      vertexId = steinerTree->adjacencyList->at(i).vertex.id;
+
+      for (unsigned int j = 0; j < steinerTree->adjacencyList->at(i).adjacencies.size(); j++)
       {
-        weight = inputGraph->adjacencyList->at(vertexId - 1).adjacencies.at(j).weight;
-        steinerTree->weight += weight;
+        vertex2Id = steinerTree->adjacencyList->at(i).adjacencies.at(j).id;
+
+        for (unsigned int k = 0; k < inputGraph->adjacencyList->at(vertexId - 1).adjacencies.size(); k++)
+        {
+          if (inputGraph->adjacencyList->at(vertexId - 1).adjacencies.at(k).id == vertex2Id)
+          {
+            weight = inputGraph->adjacencyList->at(vertexId - 1).adjacencies.at(k).weight;
+            steinerTree->totalWeight += weight;
+
+            break;
+          }
+        }
       }
     }
   }
+
+  /*O ajuste abaixo eh necessario, pois o algoritmo percorre todas as adjacencias,
+  adicionando o peso de cada aresta duas vezes*/
+  steinerTree->totalWeight /= 2;
 
   return steinerTree;
 }
-
-#ifdef XXX
-/*Funcao que insere caminhos de menor custo na arvore geradora minima*/
-void mstEdgeAdjustment(Graph* mst, ShortestPaths* dijkstraResult,
-                       map<int, int>* distinctVertices)
-{
-  int vertexId;
-  int index;
-  unsigned int mstAdjacencies;
-  unsigned int dijkstraAdjacencies;
-  ShortestPathInfo pathInfo;
-
-  /*Primeiro passo: atualiza arvore geradora minima com caminhos de menor custo*/
-
-  /*Para cada um dos vertices da arvore geradora minima*/
-  for (unsigned int i = 0; i < mst->adjacencyList->size(); i++)
-  {
-    vertexId = mst->adjacencyList->at(i).vertex.id;
-    mstAdjacencies = mst->adjacencyList->at(i).adjacencies.size();
-
-    /*Para cada uma das adjacencias de todos os vertices da
-    arvore geradora minima*/
-    for (unsigned int j = 0; j < mstAdjacencies; j++)
-    {
-      index = distinctVertices->find(vertexId)->second;
-      dijkstraAdjacencies = dijkstraResult->at(index).size();
-
-      /*Para cada uma das adjacencias dos vertices retornados pela
-      funcao que calcula o caminho de menor custo*/
-      for (unsigned int k = 0; k < dijkstraAdjacencies; k++)
-      {
-        if (dijkstraResult->at(index).at(k).path.at(0) ==
-            mst->adjacencyList->at(i).adjacencies.at(j).id)
-        {
-          /*Encontrou caminho de menor custo dentre: insere na
-          arvore geradora minima*/
-          pathInfo.path = dijkstraResult->at(index).at(k).path;
-          pathInfo.weight = dijkstraResult->at(index).at(k).weight;
-          mst->adjacencyList->at(i).vertex.shortestPathInfo.push_back(pathInfo);
-        }
-
-        /*TODO: montar [nova] arvore de steiner aqui*/
-      }
-    }
-  }
-
-  /*Segundo passo: substitui arestas determinadas por generateMST() pelos
-  caminhos de custo minimo, gerados por shortestPaths()*/
-
-
-}
-#endif
