@@ -6,17 +6,14 @@
 #include <cstdio>
 #include <climits>
 #include <chrono>
-#include <cstring>
 
 /*Mensages*/
 const char MSG_PARAMS_ERROR[] =
-  "Numero de parametros esta incorreto (Arquivo de entrada deve ser informado. Exibicao do tempo eh opcional [-t])";
+  "Numero de parametros esta incorreto (informe apenas 1 arquivo de entrada)";
 const char MSG_READFILE_ERROR[] =
   "Operacao de leitura do arquivo falhou. Codigo do erro:";
 const char MSG_OPEN_FILE_ERROR[] =
   "Nao foi possivel abrir o arquivo especificado";
-const char MSG_TIME_ARG_EXPECTED[] =
-  "Caso exista, terceiro argumento deve ser -t";
 
 using namespace std;
 using namespace std::chrono;
@@ -98,8 +95,8 @@ void insertSteiner(SteinerTree*, const int&, const unsigned int&, const int&,
                    const unsigned int&);
 SteinerTree* generateSteinerTree(Graph*, Graph*);
 void printResults(SteinerTree*);
-/*GraphViz*/
-void output_graphviz(SteinerTree* steinerTree, Graph* inputGraph);
+//test
+void output_graphviz(SteinerTree*, Graph*);
 
 /*Funcao principal*/
 int main(int argc, char* argv[])
@@ -110,77 +107,67 @@ int main(int argc, char* argv[])
   Graph* mst = nullptr;
   map<int, int> distinctVertices;
   SteinerTree* steinerTree = nullptr;
+
   ShortestPaths* dijkstraResult;
   FILE* file = nullptr;
 
-  if (argc == 3)
+  if (argc == 2)
   {
-    if (strcmp(argv[2], "-t"))
-    {
-      printf("%s\n", MSG_TIME_ARG_EXPECTED);
-
-      return -1;
-    }
+    file = fopen(argv[1], "r");
   }
-  else if (argc < 2)
+  else
   {
-    /*O arquivo de entrada deve ser enviado como argumento para
-    o programa principal*/
     printf("%s\n", MSG_PARAMS_ERROR);
 
-    return -2;
+    return -1;
   }
-
-  /*Tenta abrir arquivo de entrada*/
-  file = fopen(argv[1], "r");
 
   if (!ferror(file))
   {
-    /*Chama funcao que realiza leitura no arquivo de entrada*/
     returnedValue = readFile(file, &inputGraph);
 
     if (returnedValue)
       printf("%s %u\n", MSG_READFILE_ERROR, returnedValue);
 
-    /*Trecho de medicao tempo (1): inicio*/
-    high_resolution_clock::time_point t1 = high_resolution_clock::now();    
-    /*Trecho de medicao tempo (1): fim*/
+    //trecho medicao tempo (1) - inicio
+    duration<double> time_span2;
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+    //trecho medicao tempo (1) - fim
 
-    /*Cacula o caminho de de menor custo para todos os vertices
-    do tipo terminal*/
     dijkstraResult = dijkstra(inputGraph);
-    /*Monta o fecho metrico (grafo completo, cujos vertices sao todos os
-    vertices do tipo terminal*/
+
     terminalsCompleteGraph = createCompleteGraph(dijkstraResult);
-    /*Chama funcao que obtem a arvore geradora minima, usando como grafo
-    de entrada, o grafo completo, obtido acima*/
+    //Algoritmo de Kruskal
     mst = generateMST(terminalsCompleteGraph, &distinctVertices);
-    /*Chama funcao que gera a arvore de Steiner*/
+    //Ajusta arestas da MST, de acordo com o caminho mais curto
+    //mstEdgeAdjustment(mst, dijkstraResult, &distinctVertices);
+    //Gera arvore de Steiner
     steinerTree = generateSteinerTree(mst, inputGraph);
 
-    /*Trecho medicao tempo (2): inicio*/
+    //trecho medicao tempo (2) - inicio
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
-    duration<double> time_span = duration_cast<duration<double> >(t2 - t1);        
-    /*Trecho medicao tempo (2): fim*/
-    /*Imprime resultados*/
-    printResults(steinerTree);
-    /*Caso tenha recebido -t como argumento, imprime tempo de execucao*/
-    if (!strcmp(argv[2], "-t"))
-      printf("Tempo de execucao: %lf segundos\n", time_span.count());
-    /*GraphViz*/
-    /*output_graphviz(steinerTree, inputGraph);*/
+    duration<double> time_span = duration_cast<duration<double> >(t2 - t1);
+    //trecho medicao tempo (2) - fim
 
-    /*Fecha arquivo de entrada*/
+    cout << time_span.count() << endl;
+
+    printResults(steinerTree);
+
+    //test
+    output_graphviz(steinerTree, inputGraph);
+
     fclose(file);
+
+    delete inputGraph;
+    delete terminalsCompleteGraph;
 
     return returnedValue;
   }
   else
   {
-    /*Nao foi possivel abrir o arquivo de entrada*/
     printf("%s\n", MSG_OPEN_FILE_ERROR);
 
-    return -3;
+    return -2;
   }
 }
 
@@ -263,34 +250,27 @@ unsigned int readEdges(FILE* file, Graph* inputGraph,
 
   for (unsigned int i = 0; i < numEdges; i++)
   {
-    /*Le os dados e uma aresta*/
     fscanf(file, "%c %d %d %u %*[\r] %*[\n]", aux, &vertex, &vertex2, &weight);
 
     if (ferror(file))
       return 1;
 
-    /*Como o grafo nao eh direcionado, arestas deverao ser incluidas nos
-    dois sentidos*/
-
-    /*vertice u -> vertice v*/
+    //vertice u -> vertice v
     auxAdjacencyInfo.id = vertex2;
     auxAdjacencyInfo.weight = weight;
 
     if (inputGraph->adjacencyList->at(vertex - 1).adjacencies.size() == 0)
       inputGraph->adjacencyList->at(vertex - 1).vertex.id = vertex;
 
-    /*Adiciona adjacencia a variavel que representa o grafo de entrada*/
     inputGraph->adjacencyList->at(vertex - 1).adjacencies.push_back(auxAdjacencyInfo);
 
-    /*vertice v -> vertice u*/
+    //vertice v -> vertice u
     auxAdjacencyInfo.id = vertex;
     auxAdjacencyInfo.weight = weight;
-
 
     if (inputGraph->adjacencyList->at(vertex2 - 1).adjacencies.size() == 0)
       inputGraph->adjacencyList->at(vertex2 - 1).vertex.id = vertex2;
 
-    /*Adiciona adjacencia a variavel que representa o grafo de entrada*/
     inputGraph->adjacencyList->at(vertex2 - 1).adjacencies.push_back(auxAdjacencyInfo);
   }
 
@@ -308,45 +288,31 @@ bool readTerminals(FILE* file, Graph* inputGraph, const unsigned int& numTermina
   char aux[100];
   int vertex;
 
-  /*Aloca memoria suficiente para acomodar um ponteiro para cada terminal
-  (Essa lista de ponteiros faz com que nao seja necessario percorrer toda
-  a lista de vertices, testando qual deles eh terminal*/
   inputGraph->terminalList = new vector<Adjacencies*>(numTerminals);
 
   for (unsigned int i = 0; i < numTerminals; i++)
   {
-    /*Le linha que representa um terminal*/
     fscanf(file, "%c %d %*[\r] %*[\n]", aux, &vertex);
 
     if (ferror(file))
-      /*Indica que houve erro de leitura*/
       return true;
 
-    /*Aponta o ponteiro i para seu respectivo terminal*/
     inputGraph->terminalList->at(i) = &(inputGraph->adjacencyList->at(vertex - 1));
   }
 
-  /*Indica que nao houve erro de leitura*/
   return false;
 }
 
-/*Funcao auxiliar que usada na criacao/ajuste do heap minimo binario
+/*Funcao auxiliar que usada na criacao/ajuste do heap binario
 para o algoritmo de Dijkstra*/
 bool compare(DijkstraVertex*& ptr, DijkstraVertex*& ptr2)
 {
-  /*Compara duas distancias ate o vertice de origem*/
   return ptr->distanceFromSource > ptr2->distanceFromSource;
 }
 
-/*Funcao que executa o algoritmo de Dijkstra
-Obs.: A lista de ponteiros para vertices do tipo Dijkstra eh necessaria para
-evitar que atualizacoes dos custos/distancias sejam feitas em vertices errados.
-Como os vertices abertos sao acessados atraves de seu indice na lista de
-vertices abertos, o processo de criacao/ajuste do heap faria com que essa
-atualizacao ficasse impossivel.
-*/
+/*Funcao que executa o algoritmo de Dijkstra*/
 ShortestPaths* dijkstra(Graph* inputGraph)
-{ 
+{
   unsigned int newDistance;
   DijkstraVertex auxVertex;
   AdjacencyInfo neighbourInfo;
@@ -360,15 +326,16 @@ ShortestPaths* dijkstra(Graph* inputGraph)
     /*Inicializa ID do vertice*/
     auxVertex.id = i + 1;    
     /*Insere vertice corrente na lista de vertices abertos*/
+    //openVertices.push_back(auxVertex); //test
     openVertices.at(i) = auxVertex;
-    /*Ponteiro para um vertice aberto eh inicializado*/
+    /*Vertice aberto i passa a apontar para o vertice Dijkstra i*/
     fakeVertices.at(i) = &openVertices.at(i);
   } 
 
   /*Executa algoritmo de Dijkstra para cada um dos vertices terminais*/
   for (unsigned int i = 0; i < inputGraph->terminalList->size(); i++)
   {
-    /*Armazena ID do terminal corrente*/
+    /*Armazena ID do vertice (terminal) atual*/
     int currentTerminalId = inputGraph->terminalList->at(i)->vertex.id;
 
     for (unsigned int i = 0; i < inputGraph->adjacencyList->size(); i++)
@@ -381,7 +348,8 @@ ShortestPaths* dijkstra(Graph* inputGraph)
       openVertices.at(i).previousVertexId = i + 1;
     }
 
-    /*Define que o terminal corrente seja usado como vertice de origem*/
+    /*Fara com que o vertice (terminal) atual seja usado como vertice de origem*/
+    //fakeVertices.at(currentTerminalId - 1)->distanceFromSource = 0;
     openVertices.at(currentTerminalId - 1).distanceFromSource = 0;
     /*Variavel que ajuda no controle do tamanho do conjunto de vertices abertos*/
     unsigned int j = 0;
@@ -391,14 +359,12 @@ ShortestPaths* dijkstra(Graph* inputGraph)
       /*Organiza lista de forma que ela comportesse como um heap binario minimo*/
       make_heap(fakeVertices.begin(), fakeVertices.end() - j, compare);
       /*Sempre considera o primeiro vertice do heap*/
-      auxVertex = *(fakeVertices.at(0));
+      auxVertex = *(fakeVertices.at(0)); //teste - pegar o primeiro terminal, ao inves desse
 
       for (unsigned int k = 0;
            k < inputGraph->adjacencyList->at(auxVertex.id - 1).adjacencies.size();
            k++)
       {
-        /*Obtem <vertice anterior> e <distancia ate o vertice fonte> do
-        do vizinho corrente*/
         neighbourInfo = inputGraph->adjacencyList->at(auxVertex.id - 1).
           adjacencies.at(k);
 
@@ -406,7 +372,6 @@ ShortestPaths* dijkstra(Graph* inputGraph)
         if (neighbourInfo.id != auxVertex.previousVertexId)
           newDistance = auxVertex.distanceFromSource + neighbourInfo.weight;
 
-        /*Atualiza distancia do vertice vizinho, caso necessario*/
         if (newDistance < openVertices.at(neighbourInfo.id - 1).distanceFromSource)
         {          
           openVertices.at(neighbourInfo.id - 1).distanceFromSource = newDistance;
@@ -414,21 +379,16 @@ ShortestPaths* dijkstra(Graph* inputGraph)
         }
       }
 
-      /*"Remove" primeiro objeto do heap
-      Obs.: Remocao logica. Objeto na primeira posicao eh trocado com objeto
-      da ultima posicao. A variavel j auxilia a identificar quantos objetos
-      ainda restam no estrutura de dados*/
+      /*"Remove" primeiro objeto do heap*/
       pop_heap(fakeVertices.begin(), fakeVertices.end() - j);
       /*Essa variavel limita o numero de vertices abertos (pop_heap nao remove - apenas
       joga para o final da lista*/
       j++;
     }
 
-    /*Variavel auxiliar que armazenara informacoes sobre o caminho de
-    menor custo*/
     ShortestPathInfo auxShortestPathInfo;
 
-    /*Laco principal de identificacao do caminho e seu custo minimo*/
+    /*Laco que identifica rota e seu custo minimo*/
     for (unsigned int j = 0; j < inputGraph->terminalList->size(); j++)
     {
       /*Variavel que indica o ID do terminal para o qual deseja-se
@@ -442,13 +402,12 @@ ShortestPaths* dijkstra(Graph* inputGraph)
         /*Certifica-se de que a rota 'i' nao se confunda com a rota 'j'*/
         auxShortestPathInfo.path.clear();
 
-        /*Montagem do caminho propriamente dito, que ocorre de tras pra
-        frente*/
+        //while (nextId != graph->terminalList->at(i + 1)->vertex.id)
         while (nextId != openVertices.at(nextId - 1).previousVertexId)
         {   
           /*Insere ID no vertice na rota*/
           auxShortestPathInfo.path.push_back(nextId);
-          /*Atualiza ID do proximo vertice a ser verificado*/
+          /*Atualiza*/
           nextId = openVertices.at(nextId - 1).previousVertexId;
         }
 
@@ -460,8 +419,6 @@ ShortestPaths* dijkstra(Graph* inputGraph)
     }
   }
 
-  /*A variavel result contem as ditancias menos custosas entre
-  todos os terminais do grafo de entrada*/
   return result;
 }
 
@@ -479,15 +436,12 @@ Graph* createCompleteGraph(ShortestPaths* dijkstraResult)
   unsigned int firstVertex;
   unsigned int lastVertex;
 
-  /*Para cada terminal*/
   for (unsigned int i = 0; i < numTerminals; i++)
   {
     numAdjacencies = dijkstraResult->at(i).size();
 
-    /*Para cada, eventualmente, falsa adjacencia do terminal corrente*/
     for (unsigned int j = 0; j < numAdjacencies; j++)
     {
-      /*Insere falsa adjacencia na variavel que representa o grafo completo*/
       firstVertex = dijkstraResult->at(i).at(j).path.at(dijkstraResult->at(i).
         at(j).path.size() - 1);
       lastVertex = dijkstraResult->at(i).at(j).path.at(0);
@@ -506,15 +460,16 @@ Graph* createCompleteGraph(ShortestPaths* dijkstraResult)
 }
 
 /*Funcao que insere um vertice na MST*/
+/*void insertMST(Graph* mst, const int& vertex, const unsigned int& index,
+               const int& vertex2, const int& weight, vector<int> realPath)
+*/
 void insertMST(Graph* mst, Edge& edge, const unsigned int& index,
                const unsigned int& index2)
 {
   AdjacencyInfo adjacencyInfo;
   ShortestPathInfo pathInfo;
 
-  /*Como o grafo nao eh direcionado, a insercao devera ocorrer nos dois sentidos*/
-
-  /*u -> v*/
+  //u - v
   //Atualiza dados da adjacencia a ser inserida na MST
   adjacencyInfo.id = edge.vertex2Id;
   adjacencyInfo.weight = edge.weight;
@@ -527,7 +482,7 @@ void insertMST(Graph* mst, Edge& edge, const unsigned int& index,
   mst->adjacencyList->at(index).vertex.shortestPathInfo.push_back(pathInfo);
   mst->adjacencyList->at(index).adjacencies.push_back(adjacencyInfo);
 
-  /*v -> u*/
+  //v - u
   //Atualiza dados da adjacencia a ser inserida na MST
   adjacencyInfo.id = edge.vertexId;
   adjacencyInfo.weight = edge.weight;
@@ -543,7 +498,8 @@ void insertMST(Graph* mst, Edge& edge, const unsigned int& index,
 }
 
 /*Funcao que remove um vertice da MST*/
-void removeMST(Graph* mst, const unsigned int& index, const unsigned int& index2)
+void removeMST(Graph* mst, const unsigned int& index,
+               const unsigned int& index2)
 {
   if (mst->adjacencyList->at(index).adjacencies.size() > 0)
   {
@@ -586,19 +542,14 @@ bool hasCycle(Graph* mst, set<int>* visitedVertices,
   int neighbourId;
   int index;
 
-  /*Insere vertice de origem no conjunto de vertices ja visitados*/
   visitedVertices->insert(vertexId);
 
-  /*Para cada vizinho do vertice de origem*/
   while (i < mst->adjacencyList->at(sourceIndex).adjacencies.size())
   {
-    /*Identifica vizinho*/
     neighbourId = mst->adjacencyList->at(sourceIndex).adjacencies.at(i).id;
-    /*Identica o indice onde esse vizinho encontra-se na arvore geradora minima*/
     index = distinctVertices->find(neighbourId)->second;
     i++;
 
-    /*Verifica se vizinho corrente ainda nao foi visitado*/
     if (visitedVertices->find(neighbourId) == visitedVertices->end())
     {
       /*Vizinho corrente ainda nao foi visitado*/
@@ -607,7 +558,7 @@ bool hasCycle(Graph* mst, set<int>* visitedVertices,
       visitedVertices->insert(neighbourId);
       /*Chamada recursiva*/
       if (hasCycle(mst, visitedVertices, distinctVertices, index, vertexId))
-        /*Ciclo detectado: interrompe busca*/
+        /*Interrompe busca caso seja detectado*/
         return true;
     }
     else if (neighbourId != parentId)
@@ -621,19 +572,16 @@ bool hasCycle(Graph* mst, set<int>* visitedVertices,
   return false;
 }
 
-/*Funcao responsavel por construir uma arvore geradora minima, a partir
-do grafo completo (fecho metrico), usando o algoritmo de Kruskal*/
 Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 {
+  //TODO: distinctVertices pode ser local... era pointeiro pq usava em outra funcao... usava isso pra preencher mst com shortest path (agora vem de completeGraph)
+  /*Usar essa ideia de 'size' na funcao acima...*/
   unsigned int size = completeGraph->adjacencyList->size();
   vector<Edge>* edgeList = new vector<Edge>;
   Graph* mst = new Graph;
   mst->adjacencyList = new vector<Adjacencies>(size);
   Edge edge;
 
-  /*Variavel utilizada pela funcao hasCycle(). Eh declarada aqui pq hasCycle()
-  eh recursiva. Caso contrario nao funcionaria... variavel seria redeclarada a
-  cada chamada*/
   set<int> visitedVertices;
   pair<map<int, int>::iterator, bool> resultPair;
   pair<map<int, int>::iterator, bool> resultPair2;
@@ -659,27 +607,16 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 
   unsigned int i = 0;
   unsigned int insertedEdges = 0;
-  /*Como durante a construcao da arvore gerado minima nao eh possivel prever quais
-  vertices serao inseridos primeiro, ja que isso depende das arestas de menor peso,
-  e como as listas sao acessadas via indice, eh necessario armazenar o indica de
-  insercao de cada vertice em algum lugar. A variavel insertionIndex, em conjunto
-  com a estrutura de dados distinctVertices realizam esse controle*/
   unsigned int insertionIndex = 0;
 
-  /*Laco eh realizado ate que o numero de arestas inseridas seja igual a
-  n - 1*/
+  /*Numa arvore, n = m - 1*/
   while (insertedEdges < size - 1)
   {
-    /*map.insert() retorna um iterator para um par, em que o primeiro
-    elemento eh objeto inserido na estrutura de dados e o segundo eh um
-    valor booleano, que indica se a insercao ocorreu com sucesso*/
     resultPair = distinctVertices->insert(
       pair<int, int>(edgeList->at(i).vertexId, insertionIndex));
     vertexIndex = resultPair.first->second;
 
     if (resultPair.second)
-      /*Caso um novo vertice tenha sido inserido, atualiza variavel
-      que indica o indice onde a proxima insercao ocorrera*/
       insertionIndex++;
 
     resultPair2 = distinctVertices->insert(
@@ -691,12 +628,15 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
 
     /*Atualiza arvore geradora minima com nova aresta e vertice(s)*/
     insertMST(mst, edgeList->at(i), vertexIndex, vertex2Index);
+    /*
+    insertMST(mst, edgeList->at(i).vertexId, vertexIndex,
+              edgeList->at(i).vertex2Id, edgeList->at(i).weight);
+    insertMST(mst, edgeList->at(i).vertex2Id, vertex2Index,
+              edgeList->at(i).vertexId, edgeList->at(i).weight);
+    */
 
-    /*Conjunto de vertices visitados pela funcao que executa o DFS deve
-    ser reiniciado a cada chamada.*/
     visitedVertices.clear();
 
-    /*Verifica se a aresta recem inserida adicionou um ciclo ao grafo*/
     if (hasCycle(mst, &visitedVertices, distinctVertices, vertexIndex, -1))
     {
       /*Ciclo detectado*/
@@ -709,30 +649,27 @@ Graph* generateMST(Graph* completeGraph, map<int, int>* distinctVertices)
       if (resultPair2.second)
         /*Se vertex2 foi inserido, sera removido*/
         distinctVertices->erase(resultPair2.first);
+
+      //insertedEdges--;
     }
     else
     {
-      /*Contador de arestas inseridas com sucesso*/
       insertedEdges++;
     }
 
-    /*Contador de quantidade de arestas existentes no grafo completo*/
     i++;
   }
 
   return mst;
 }
 
-/*Funcao que insere os vertices de uma aresta na arvore de Steiner*/
 void insertSteiner(SteinerTree* steinerTree, const int& vertexId,
                    const unsigned int& index, const int& vertex2Id,
                    const unsigned int& index2)
 {
   AdjacencyInfo adjacencyInfo;
 
-  /*Como o grafo nao eh direcionado, a insercao devera ocorrer nos dois sentidos*/
-
-  /*u -> v*/
+  //u - v
   //Atualiza dados da adjacencia a ser inserida na MST
   adjacencyInfo.id = vertex2Id;
 
@@ -741,7 +678,7 @@ void insertSteiner(SteinerTree* steinerTree, const int& vertexId,
   steinerTree->adjacencyList->at(index).vertex.id = vertexId;
   steinerTree->adjacencyList->at(index).adjacencies.push_back(adjacencyInfo);
 
-  /*v -> u*/
+  //v - u
   //Atualiza dados da adjacencia a ser inserida na MST
   adjacencyInfo.id = vertexId;
 
@@ -751,14 +688,10 @@ void insertSteiner(SteinerTree* steinerTree, const int& vertexId,
   steinerTree->adjacencyList->at(index2).adjacencies.push_back(adjacencyInfo);
 }
 
-/*Funcao que gera a arvore de Steiner, a partir da arvore geradora minima e do
-grafo de entrada (obter pesos).
-Obs.: A ideia dessa funcao eh substituir cada aresta da arvore geradora minima
-pelo caminho mais curto, determinado via Dijkstra. Porem, como isso nao garante
-que o grafo resultante nao contera ciclos, eh preciso fazer essa verificacao.*/
 SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
 {
   SteinerTree* steinerTree;
+  Edge edge;
   set<int> visitedVertices;
   map<int, int> distinctVertices;
   pair<map<int, int>::iterator, bool> resultPair;
@@ -772,26 +705,19 @@ SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
   int vertexId;
   int vertex2Id;
 
-  /*Como nao eh possivel determinar a quantidade de exata de vertices que irao
-  compor a arvore de Steiner, aloca memoria para n vertices*/
   steinerTree = new SteinerTree;
   steinerTree->adjacencyList = new vector<Adjacencies>(inputGraph->adjacencyList->size());
   steinerTree->totalWeight = 0;
 
-  /*Para cada vertice da arvore geradora minima*/
   for (unsigned int i = 0; i < mst->adjacencyList->size(); i++)
   {
     numPaths = mst->adjacencyList->at(i).vertex.shortestPathInfo.size();
 
-    /*Para cada adjacencia*/
     for (unsigned int j = 0; j < numPaths; j++)
     {
-      /*Identifica comprimento do caminho mais curto*/
       pathSize = mst->adjacencyList->at(i).vertex.shortestPathInfo.at(j).path.size();
       vector<int>& path = mst->adjacencyList->at(i).vertex.shortestPathInfo.at(j).path;
 
-      /*Para cada par de vertices do caminho mais curto, tenta inserir tal
-      aresta na arvore de Steiner*/
       for (unsigned int k = 0; k < pathSize - 1; k++)
       {
         resultPair = distinctVertices.insert(
@@ -808,14 +734,10 @@ SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
         if (resultPair2.second)
           insertionIndex++;
 
-        /*Chama funcao que realiza a insercao dos vertices na arvore de Steiner*/
         insertSteiner(steinerTree, path.at(k), vertexIndex, path.at(k + 1), vertex2Index);
 
-        /*Conjunto de vertices visitados pela funcao que executa o DFS deve
-        ser reiniciado a cada chamada.*/
         visitedVertices.clear();
 
-        /*Verifica se a aresta recem inserida adicionou um ciclo ao grafo*/
         if (hasCycle(steinerTree, &visitedVertices, &distinctVertices, vertexIndex, -1))
         {
           /*Ciclo detectado*/
@@ -833,7 +755,6 @@ SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
     }
   }
 
-  /*Identifica o peso de cada aresta que compoe a arvore de Steiner*/
   for (unsigned int i = 0; i < steinerTree->adjacencyList->size(); i++)
   {
     if (steinerTree->adjacencyList->at(i).vertex.id != -1)
@@ -865,7 +786,6 @@ SteinerTree* generateSteinerTree(Graph* mst, Graph* inputGraph)
   return steinerTree;
 }
 
-/*Funcao que imprime os resultados*/
 void printResults(SteinerTree* steinerTree)
 {
   unsigned int i = 0;
@@ -886,7 +806,7 @@ void printResults(SteinerTree* steinerTree)
     i++;
   }
 
-  printf("Vertices (%lu): ", distinctVertices.size());
+  printf("Vertices (%u): ", distinctVertices.size());
 
   for (set<int>::iterator it = distinctVertices.begin(); it != distinctVertices.end(); it++)
     printf("%d, ", *it);
